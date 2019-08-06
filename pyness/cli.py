@@ -9,7 +9,6 @@ from dask.distributed import Client
 from dask.distributed import LocalCluster
 from functools import partial
 import logging
-import os
 
 from . import arguments
 from . import log
@@ -57,9 +56,10 @@ def _main() -> None:
 
         else:
             if args.distributed:
-                log._logger.warning(
-                    'Distributed computing is not need when starting from multiple seeds'
-                )
+                log._logger.warning((
+                    'Distributed computing is unnecessary when starting from '
+                    'multiple seeds'
+                ))
 
     else:
         ## We're doing permutation testing...
@@ -81,6 +81,8 @@ def _main() -> None:
                     matrix, seeds, uids, args.output, args.permutations, args.restart
                 )
 
+                client.close()
+
             else:
                 ## Run the permutation testing
                 ness.run_individual_permutation_tests(
@@ -101,6 +103,8 @@ def _main() -> None:
                 ness.distribute_individual_walks(
                     matrix, seeds, uids, args.output, args.restart
                 )
+
+                client.close()
 
             else:
                 ness.run_individual_walks(matrix, seeds, uids, args.output, args.restart)

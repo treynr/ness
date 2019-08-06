@@ -7,11 +7,17 @@
 
 from collections import namedtuple
 from typing import Dict
+from typing import List
 import argparse
 import logging
 import pandas as pd
 
 from . import log
+from .types import Gene
+from .types import GeneSet
+from .types import Homolog
+from .types import Term
+from .types import BioEntity
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -30,7 +36,34 @@ def _read_df(input: str) -> pd.DataFrame:
     return pd.read_csv(input, sep='\t')
 
 
-def read_seeds(input: str) -> pd.DataFrame:
+def parse_seed(seed: str) -> BioEntity:
+    """
+    Parse a string representing a seed node into a wrapped BioEntity type.
+
+    arguments
+        seed: seed node string
+
+    returns
+        a BioEntity
+    """
+
+    biotype, seed = seed.split(':')
+
+    if biotype.lower() == 'gene':
+        return Gene(seed)
+    elif biotype.lower() == 'geneset':
+        return GeneSet(seed)
+    elif biotype.lower() == 'term':
+        return Term(seed)
+    elif biotype.lower() == 'homolog':
+        return Homolog(seed)
+    else:
+        log._logger.warning(f'No BioEntity matches the given type, "{biotype}"')
+
+    return None
+
+
+def read_seeds(input: str) -> List[BioEntity]:
     """
     Read and parse a seed list file.
 
@@ -41,7 +74,13 @@ def read_seeds(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    return pd.read_csv(input, sep='\t', header=None).iloc[:, 0].tolist()
+    return (
+        pd.read_csv(input, sep='\t', header=None)
+            .iloc[:, 0]
+            .map(parse_seed)
+            .dropna()
+            .tolist()
+    )
 
 
 def read_edges(input: str) -> pd.DataFrame:

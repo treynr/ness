@@ -5,10 +5,7 @@
 ## desc: NESS python implementation.
 ## auth: TR
 
-from dask.distributed import Client
-from dask.distributed import LocalCluster
 from dask.distributed import get_client
-from functools import partial
 from pathlib import Path
 from scipy.linalg import norm
 from scipy.sparse import csr_matrix
@@ -40,11 +37,11 @@ def _append_ness_output(output: str, vector: pd.DataFrame, has_p: bool = False) 
 
     if has_p:
         columns = ['node_from', 'node_to', 'probability', 'p']
-        vector = vector.sort_values(bp='p', ascending=True)
+        vector = vector.sort_values(by='p', ascending=True)
 
     else:
         columns = ['node_from', 'node_to', 'probability']
-        vector = vector.sort_values(bp='probability', ascending=False)
+        vector = vector.sort_values(by='probability', ascending=False)
 
     vector.to_csv(
         output,
@@ -106,10 +103,15 @@ def _map_seed_uids(seeds: List[str], uids: Dict[str, int]) -> List[int]:
     returns
         a list of seed UIDs
     """
+    from .types import GeneSet
 
     seed_uids = []
 
     for s in seeds:
+        #print(uids)
+        #print(s)
+        #print(uids[GeneSet(74017)])
+        #print(uids[s])
         if s not in uids:
             log._logger.warning(f'Skipping seed node {s} which is missing from the graph')
             continue
@@ -261,12 +263,7 @@ def _run_individual_walks(
     ## Map seed UIDs
     mapped_seeds = _map_seed_uids(seeds, uids)
 
-    prox_vectors = []
-
-    #for s in mapped_seeds:
-
     ## Walk the graph
-    #prox_vector = random_walk(matrix, [s], alpha)
     prox_vector = random_walk(matrix, mapped_seeds, alpha)
 
     ## Construct the output
@@ -275,13 +272,11 @@ def _run_individual_walks(
 
     ## Map bio-entities back from UIDs
     prox_vector['node_to'] = prox_vector['index'].map(reverse_uids)
+    prox_vector['node_to'] = prox_vector.node_to.map(str)
 
     ## Add the seed node
-    prox_vector['node_from'] = ';'.join([reverse_uids[s] for s in mapped_seeds])
+    prox_vector['node_from'] = ';'.join([str(reverse_uids[s]) for s in mapped_seeds])
 
-    #prox_vectors.append(prox_vector)
-
-    #return pd.concat(prox_vectors)
     return prox_vector
 
 
@@ -402,12 +397,8 @@ def _run_individual_permutation_tests(
         alpha:  restart probability
     """
 
-    log._logger.info('Running random walk...')
-
     ## First get the proximity vector for the walk
     prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
-
-    log._logger.info('Running permutation tests...')
 
     ## Start the permutation testing
     for i in range(permutations):
@@ -465,8 +456,6 @@ def run_individual_permutation_tests(
             matrix, [s], uids, permutations, alpha
         )
 
-        log._logger.info('Calculating p-values...')
-
         ## Calculate the p-value
         prox_vector = _calculate_p(prox_vector, permutations)
 
@@ -519,8 +508,12 @@ def distribute_individual_permutation_tests(
         permuted_futures = []
         s = client.scatter([s], broadcast=True)
 
+        ## Splits up the permutation test based on the number of workers
+        div = len(list(client.nthreads().keys()))
+
         ## Split the number of permutations evenly
-        for chunk in np.array_split(np.zeros(permutations), os.cpu_count()):
+        #for chunk in np.array_split(np.zeros(permutations), os.cpu_count()):
+        for chunk in np.array_split(np.zeros(permutations), div):
 
             prox_vector_future = client.submit(
                 _run_individual_permutation_tests,
@@ -541,7 +534,10 @@ def distribute_individual_permutation_tests(
     ## Wait for testing to finish
     for test in futures:
 
+        ## Gather the results of the permutation tests for this specific seed node
         test = client.gather(test)
+        ## Get the first test so we keep the node_from, node_to, and prob. columns and
+        ## concat the walk scores from the rest.
         prox_vector = test.pop(0)
 
         #print('wut')
@@ -549,36 +545,42 @@ def distribute_individual_permutation_tests(
         #print('wut')
         #print(prox_vector.head())
         #exit()
+        ## Get rid of node_from, node_to, prob. columns from the rest of the tests and
+        ## only keep their permuted walk scores
         for df in test:
-
             prox_vector = pd.concat([
                 prox_vector,
                 df.drop(columns=['node_from', 'node_to', 'probability'])
             ], axis=1)
 
-        ## Calculate the p-value using the cumulative probability of observing a walk
-        ## score of equal or greater magnitude
-        prox_vector['p'] = (
-            prox_vector.filter(regex='p_\d+')
-                .apply(lambda x: x >= prox_vector.probability)
-                .select_dtypes(include=['bool'])
-                .sum(axis=1)
-        )
-        prox_vector['p'] = (prox_vector['p'] + 1) / (permutations + 1)
-
-        prox_vector = prox_vector[['node_from', 'node_to', 'probability', 'p']]
+        ## Calculate the p-value
+        prox_vector = _calculate_p(prox_vector, permutations)
 
         ## Save the output
-        prox_vector.sort_values(by='p', ascending=True).to_csv(
-            output,
-            mode='a',
-            sep='\t',
-            index=False,
-            header=False,
-            columns=['node_from', 'node_to', 'probability', 'p']
-        )
+        _append_ness_output(output, prox_vector, has_p=True)
+        ## Calculate the p-value using the cumulative probability of observing a walk
+        ## score of equal or greater magnitude
+        #prox_vector['p'] = (
+        #    prox_vector.filter(regex='p_\d+')
+        #        .apply(lambda x: x >= prox_vector.probability)
+        #        .select_dtypes(include=['bool'])
+        #        .sum(axis=1)
+        #)
+        #prox_vector['p'] = (prox_vector['p'] + 1) / (permutations + 1)
 
-    client.close()
+        #prox_vector = prox_vector[['node_from', 'node_to', 'probability', 'p']]
+
+        ## Save the output
+        #prox_vector.sort_values(by='p', ascending=True).to_csv(
+        #    output,
+        #    mode='a',
+        #    sep='\t',
+        #    index=False,
+        #    header=False,
+        #    columns=['node_from', 'node_to', 'probability', 'p']
+        #)
+
+    #client.close()
 
 
 if __name__ == '__main__':

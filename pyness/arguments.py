@@ -10,6 +10,8 @@ from typing import List
 import logging
 import os
 
+from . import parse
+
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
@@ -124,9 +126,10 @@ def _register_args(parser: ArgumentParser) -> ArgumentParser:
     proc_group.add_argument(
         '-c',
         '--cores',
-        action='store_true',
+        action='store',
         default=os.cpu_count(),
         dest='cores',
+        type=int,
         help='distribute computations among N cores (default = all available cores)'
     )
 
@@ -206,6 +209,7 @@ def setup_arguments(exe):
 
     if args.seeds is not None:
         args.seeds = _parse_comma_list(args.seeds)
+        args.seeds = [parse.parse_seed(s) for s in args.seeds]
 
     return args
 

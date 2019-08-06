@@ -23,6 +23,53 @@ from .types import Term
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
+def encapsulate_bioentities(
+    annotations: pd.DataFrame = None,
+    edges: pd.DataFrame = None,
+    genesets: pd.DataFrame = None,
+    ontologies: pd.DataFrame = None,
+    homology: pd.DataFrame = None,
+) -> tuple:
+    """
+    Wraps the parsed genes, sets, terms, and homologs in dataclasses so duplicate
+    IDs can be distinguished from one another.
+
+    arguments
+        annotations: ontology or geneset annotations
+        edges:       edges from bio networks
+        genesets:    gene sets
+        ontologies:  ontology relationships
+        homology:    homologs
+
+    returns
+        a tuple containing wrapped bio entities
+    """
+
+    if annotations is not None:
+        annotations['term'] = annotations.term.astype(str).map(Term)
+        annotations['gene'] = annotations.gene.astype(str).map(Gene)
+
+    ## Auto assume both nodes in the edge are genes. Should be true in the vast
+    ## majority of cases.
+    if edges is not None:
+        edges['node_from'] = edges.astype(str).node_from.map(Gene)
+        edges['node_to'] = edges.astype(str).node_tomap(Gene)
+
+    if genesets is not None:
+        genesets['gsid'] = genesets.astype(str).gsid.map(GeneSet)
+        genesets['gene'] = genesets.astype(str).gene.map(Gene)
+
+    if ontologies is not None:
+        ontologies['child'] = ontologies.astype(str).child.map(Term)
+        ontologies['parent'] = ontologies.astype(str).parent.map(Term)
+
+    if homology is not None:
+        homology['child'] = homology.astype(str).cluster.map(Term)
+        homology['parent'] = homology.astype(str).gene.map(Term)
+
+
+    return (annotations, edges, genesets, ontologies, homology)
+
 def generate_node_uids(
     annotations: pd.DataFrame = None,
     edges: pd.DataFrame = None,
@@ -47,24 +94,24 @@ def generate_node_uids(
     entities = []
 
     if annotations is not None:
-        entities.extend([Term(t) for t in annotations.term.tolist()])
-        entities.extend([Gene(g) for g in annotations.gene.tolist()])
+        entities.extend(annotations.term.tolist())
+        entities.extend(annotations.gene.tolist())
 
     if edges is not None:
-        entities.extend([Gene(g) for g in edges.node_from.tolist()])
-        entities.extend([Gene(g) for g in edges.node_to.tolist()])
+        entities.extend(edges.node_from.tolist())
+        entities.extend(edges.node_to.tolist())
 
     if genesets is not None:
-        entities.extend([GeneSet(g) for g in genesets.gsid.tolist()])
-        entities.extend([Gene(g) for g in genesets.gene.tolist()])
+        entities.extend(genesets.gsid.tolist())
+        entities.extend(genesets.gene.tolist())
 
     if ontologies is not None:
-        entities.extend([Term(t) for t in ontologies.child.tolist()])
-        entities.extend([Term(t) for t in ontologies.parent.tolist()])
+        entities.extend(ontologies.child.tolist())
+        entities.extend(ontologies.parent.tolist())
 
     if homology is not None:
-        entities.extend([Homolog(h) for h in homology.cluster.tolist()])
-        entities.extend([Gene(g) for g in homology.gene.tolist()])
+        entities.extend(homology.cluster.tolist())
+        entities.extend(homology.gene.tolist())
 
     entities = pd.Series(entities).drop_duplicates()
 
@@ -201,7 +248,7 @@ def build_graph(inputs: Dict[str, pd.DataFrame]) -> nx.Graph:
 
     log._logger.info('Generating node UIDs...')
 
-    uids = generate_node_uids(
+    annotations, edges, genesets, ontologies, homology = encapsulate_bioentities(
         annotations=inputs.annotations,
         edges=inputs.edges,
         genesets=inputs.genesets,
@@ -209,15 +256,23 @@ def build_graph(inputs: Dict[str, pd.DataFrame]) -> nx.Graph:
         homology=inputs.homology
     )
 
+    uids = generate_node_uids(
+        annotations=annotations,
+        edges=edges,
+        genesets=genesets,
+        ontologies=ontologies,
+        homology=homology
+    )
+
     log._logger.info('Building the heterogeneous graph...')
 
     hetnet = build_heterogeneous_graph(
         uids,
-        annotations=inputs.annotations,
-        edges=inputs.edges,
-        genesets=inputs.genesets,
-        ontologies=inputs.ontologies,
-        homology=inputs.homology
+        annotations=annotations,
+        edges=edges,
+        genesets=genesets,
+        ontologies=ontologies,
+        homology=homology
     )
 
     return (uids, hetnet)
