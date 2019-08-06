@@ -25,6 +25,25 @@ from . import log
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
+def _make_ness_header_output(output: str, vector: pd.DataFrame) -> None:
+    """
+    Write the NESS header output to a file.
+
+    arguments
+        output: output filepath
+        vector: proximity vector results
+    """
+
+    if 'q' in vector.columns:
+        columns = ['node_from', 'node_to', 'probability', 'p', 'q']
+    elif 'p' in vector.columns:
+        columns = ['node_from', 'node_to', 'probability', 'p']
+    else:
+        columns = ['node_from', 'node_to', 'probability']
+
+    vector.iloc[0:0].to_csv(output, sep='\t', index=False, columns=columns)
+
+
 def _append_ness_output(
     output: str,
     vector: pd.DataFrame,
@@ -41,11 +60,11 @@ def _append_ness_output(
         has_q:  if true, the vector also contains adjusted p-values (q-values)
     """
 
-    if has_q:
+    if 'q' in vector.columns:
         columns = ['node_from', 'node_to', 'probability', 'p', 'q']
         vector = vector.sort_values(by='q', ascending=True)
 
-    elif has_p:
+    elif 'p' in vector.columns:
         columns = ['node_from', 'node_to', 'probability', 'p']
         vector = vector.sort_values(by='p', ascending=True)
 
@@ -172,6 +191,7 @@ def _adjust_fdr(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.sort_values(by=['p', 'probability']).reset_index(drop=True)
     df['q'] = df.p * len(df.index) / (df.index + 1)
+    df['q'] = df.q.mask(df.q > 1.0, 1.0)
 
     return df
 
@@ -497,7 +517,8 @@ def distribute_individual_permutation_tests(
     output: str,
     permutations: int = 250,
     alpha: np.double = 0.15,
-    multiple: bool = True
+    multiple: bool = True,
+    fdr: bool = False
 ) -> None:
     """
     Run the random walk algorithm for seeds in the given seeds list and also perform
@@ -513,10 +534,6 @@ def distribute_individual_permutation_tests(
         alpha:        restart probability
         multiple:     start from multiple seed nodes at once
     """
-
-    ## Clear the output file if it exists
-    with open(output, 'w') as fl:
-        print('\t'.join(['node_from', 'node_to', 'probability', 'p']), file=fl)
 
     client = get_client()
 
@@ -559,7 +576,7 @@ def distribute_individual_permutation_tests(
     log._logger.info('Calculating p-values...')
 
     ## Wait for testing to finish
-    for test in futures:
+    for i, test in enumerate(futures):
 
         ## Gather the results of the permutation tests for this specific seed node
         test = client.gather(test)
@@ -567,11 +584,6 @@ def distribute_individual_permutation_tests(
         ## concat the walk scores from the rest.
         prox_vector = test.pop(0)
 
-        #print('wut')
-        #print('wut')
-        #print('wut')
-        #print(prox_vector.head())
-        #exit()
         ## Get rid of node_from, node_to, prob. columns from the rest of the tests and
         ## only keep their permuted walk scores
         for df in test:
@@ -583,31 +595,16 @@ def distribute_individual_permutation_tests(
         ## Calculate the p-value
         prox_vector = _calculate_p(prox_vector, permutations)
 
-        ## Save the output
-        _append_ness_output(output, prox_vector, has_p=True)
-        ## Calculate the p-value using the cumulative probability of observing a walk
-        ## score of equal or greater magnitude
-        #prox_vector['p'] = (
-        #    prox_vector.filter(regex='p_\d+')
-        #        .apply(lambda x: x >= prox_vector.probability)
-        #        .select_dtypes(include=['bool'])
-        #        .sum(axis=1)
-        #)
-        #prox_vector['p'] = (prox_vector['p'] + 1) / (permutations + 1)
+        ## FDR adjusted p-values
+        if fdr:
+            prox_vector = _adjust_fdr(prox_vector)
 
-        #prox_vector = prox_vector[['node_from', 'node_to', 'probability', 'p']]
+        ## Create a new file if necessary
+        if i == 0:
+            _make_ness_header_output(output, prox_vector)
 
         ## Save the output
-        #prox_vector.sort_values(by='p', ascending=True).to_csv(
-        #    output,
-        #    mode='a',
-        #    sep='\t',
-        #    index=False,
-        #    header=False,
-        #    columns=['node_from', 'node_to', 'probability', 'p']
-        #)
-
-    #client.close()
+        _append_ness_output(output, prox_vector)
 
 
 if __name__ == '__main__':

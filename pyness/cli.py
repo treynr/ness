@@ -78,7 +78,13 @@ def _main() -> None:
 
                 ## Do the permutation testing
                 ness.distribute_individual_permutation_tests(
-                    matrix, seeds, uids, args.output, args.permutations, args.restart
+                    matrix,
+                    seeds,
+                    uids,
+                    args.output,
+                    permutations=args.permutations,
+                    alpha=args.restart,
+                    fdr=args.fdr
                 )
 
                 client.close()
