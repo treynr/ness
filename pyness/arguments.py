@@ -134,6 +134,14 @@ def _register_args(parser: ArgumentParser) -> ArgumentParser:
     )
 
     proc_group.add_argument(
+        '-f',
+        '--fdr',
+        action='store_true',
+        dest='fdr',
+        help='produce FDR adjusted p-values'
+    )
+
+    proc_group.add_argument(
         '-n',
         '--permutations',
         action='store',

@@ -25,7 +25,12 @@ from . import log
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-def _append_ness_output(output: str, vector: pd.DataFrame, has_p: bool = False) -> None:
+def _append_ness_output(
+    output: str,
+    vector: pd.DataFrame,
+    has_p: bool = False,
+    has_q: bool = False
+) -> None:
     """
     Append NESS output to the given file.
 
@@ -33,9 +38,14 @@ def _append_ness_output(output: str, vector: pd.DataFrame, has_p: bool = False) 
         output: output filepath
         vector: proximity vector results
         has_p:  if true, the vector also contains p-values from permutation testing
+        has_q:  if true, the vector also contains adjusted p-values (q-values)
     """
 
-    if has_p:
+    if has_q:
+        columns = ['node_from', 'node_to', 'probability', 'p', 'q']
+        vector = vector.sort_values(by='q', ascending=True)
+
+    elif has_p:
         columns = ['node_from', 'node_to', 'probability', 'p']
         vector = vector.sort_values(by='p', ascending=True)
 
@@ -147,6 +157,23 @@ def _calculate_p(vector: pd.DataFrame, n: int) -> pd.DataFrame:
 
     ## Get rid of all the permuted score columns
     return vector[['node_from', 'node_to', 'probability', 'p']]
+
+
+def _adjust_fdr(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Produce FDR adjusted p-values for the given dataset.
+
+    arguments
+        df: dataframe containing walk scores and p-values
+
+    returns
+        a dataframe with adjust p-values
+    """
+
+    df = df.sort_values(by=['p', 'probability']).reset_index(drop=True)
+    df['q'] = df.p * len(df.index) / (df.index + 1)
+
+    return df
 
 
 def initialize_proximity_vector(size: int, seeds: List[int]) -> np.array:
