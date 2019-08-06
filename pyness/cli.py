@@ -52,13 +52,23 @@ def _main() -> None:
         seeds = uids.values()
 
     if args.multiple:
-        pass
+        if args.permutations:
+            pass
+
+        else:
+            if args.distributed:
+                log._logger.warning(
+                    'Distributed computing is not need when starting from multiple seeds'
+                )
 
     else:
+        ## We're doing permutation testing...
         if args.permutations:
+
+            ## Distribute permutation tests across a local cluster
             if args.distributed:
 
-                ## Start a local cluster utilizing all available cores
+                ## Start a local cluster utilizing the specified number of cores
                 client = Client(LocalCluster(n_workers=args.cores))
 
                 ## Run the logging init function on each worker and register the callback so
@@ -77,8 +87,17 @@ def _main() -> None:
                     matrix, seeds, uids, args.output, args.permutations, args.restart
                 )
 
+        ## No permutation testing, just the walk...
         else:
             if args.distributed:
+                ## Start a local cluster utilizing the specified number of cores
+                client = Client(LocalCluster(n_workers=args.cores))
+
+                ## Run the logging init function on each worker and register the callback so
+                ## future workers also run the function
+                init_logging_partial = partial(log._initialize_logging, verbose=args.verbose)
+                client.register_worker_callbacks(setup=init_logging_partial)
+
                 ness.distribute_individual_walks(
                     matrix, seeds, uids, args.output, args.restart
                 )

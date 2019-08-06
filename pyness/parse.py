@@ -76,7 +76,6 @@ def read_annotations(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-
     df = _read_df(input)
     df = df.rename(columns={df.columns[0]: 'term', df.columns[1]: 'gene'})
 

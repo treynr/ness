@@ -28,13 +28,43 @@ from . import log
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-def merge_files(files: List[str], output: str, delete: bool = True) -> None:
+def _append_ness_output(output: str, vector: pd.DataFrame, has_p: bool = False) -> None:
+    """
+    Append NESS output to the given file.
+
+    arguments
+        output: output filepath
+        vector: proximity vector results
+        has_p:  if true, the vector also contains p-values from permutation testing
     """
 
-    :param arr:
-    :param dex:
-    :param value:
-    :return:
+    if has_p:
+        columns = ['node_from', 'node_to', 'probability', 'p']
+        vector = vector.sort_values(bp='p', ascending=True)
+
+    else:
+        columns = ['node_from', 'node_to', 'probability']
+        vector = vector.sort_values(bp='probability', ascending=False)
+
+    vector.to_csv(
+        output,
+        mode='a',
+        sep='\t',
+        index=False,
+        header=False,
+        columns=columns
+    )
+
+
+def _merge_files(files: List[str], output: str, delete: bool = True) -> None:
+    """
+    Concatenate multiple files into a single file.
+
+    arguments
+        files:  list of files to concatenate
+        output: output filepath
+        delete: if true, delete individual files after adding their contents to the
+                final output filepath
     """
 
     if not files:
@@ -87,6 +117,34 @@ def _map_seed_uids(seeds: List[str], uids: Dict[str, int]) -> List[int]:
         seed_uids.append(uids[s])
 
     return seed_uids
+
+
+def _calculate_p(vector: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Calculate p-values for a permuted walk dataset. The p-value is the cumulative
+    probability of observing a walk score of equal or greater magnitude.
+
+    arguments
+        vector: proximity vector results
+        n:      the number of permutations
+
+    returns
+        a proximity vector with p-values attached
+    """
+
+    ## Isolate permuted walk scores (these fields begin w/ p_), identify permuted scores
+    ## of equal or greater magnitude than the one originally observed, sum the scores,
+    ## then calculate the p-value.
+    vector['p'] = (
+        vector.filter(regex='p_\d+')
+            .apply(lambda x: x >= vector.probability)
+            .select_dtypes(include=['bool'])
+            .sum(axis=1)
+    )
+    vector['p'] = (vector.p + 1) / (n + 1)
+
+    ## Get rid of all the permuted score columns
+    return vector[['node_from', 'node_to', 'probability', 'p']]
 
 
 def initialize_proximity_vector(size: int, seeds: List[int]) -> np.array:
@@ -186,7 +244,8 @@ def _run_individual_walks(
     alpha: np.double = 0.15
 ) -> pd.DataFrame:
     """
-    Run the random walk algorithm. Helper function for run_individual_walks.
+    Run the random walk algorithm. Helper function called by the run_* and distribute_*
+    functions.
 
     arguments
         matrix: transition probability matrix
@@ -204,24 +263,26 @@ def _run_individual_walks(
 
     prox_vectors = []
 
-    for s in mapped_seeds:
+    #for s in mapped_seeds:
 
-        ## Walk the graph
-        prox_vector = random_walk(matrix, [s], alpha)
+    ## Walk the graph
+    #prox_vector = random_walk(matrix, [s], alpha)
+    prox_vector = random_walk(matrix, mapped_seeds, alpha)
 
-        ## Construct the output
-        prox_vector = pd.DataFrame(prox_vector, columns=['probability'])
-        prox_vector = prox_vector.reset_index(drop=False)
+    ## Construct the output
+    prox_vector = pd.DataFrame(prox_vector, columns=['probability'])
+    prox_vector = prox_vector.reset_index(drop=False)
 
-        ## Map bio-entities back from UIDs
-        prox_vector['node_to'] = prox_vector['index'].map(reverse_uids)
+    ## Map bio-entities back from UIDs
+    prox_vector['node_to'] = prox_vector['index'].map(reverse_uids)
 
-        ## Add the seed node
-        prox_vector['node_from'] = reverse_uids[s]
+    ## Add the seed node
+    prox_vector['node_from'] = ';'.join([reverse_uids[s] for s in mapped_seeds])
 
-        prox_vectors.append(prox_vector)
+    #prox_vectors.append(prox_vector)
 
-    return pd.concat(prox_vectors)
+    #return pd.concat(prox_vectors)
+    return prox_vector
 
 
 def run_individual_walks(
@@ -229,36 +290,42 @@ def run_individual_walks(
     seeds: List[str],
     uids: Dict[str, int],
     output: str,
-    alpha: np.double = 0.15
-) -> None:
+    alpha: np.double = 0.15,
+    multiple: bool = False
+) -> str:
     """
-    Run the random walk algorithm.
+    Run the random walk algorithm for each seed in the given seeds list.
 
     arguments
-        matrix: transition probability matrix
-        seeds:  seed list
-        uids:   UID map
-        output: output filepath
-        alpha:  restart probability
+        matrix:   transition probability matrix
+        seeds:    seed list
+        uids:     UID map
+        output:   output filepath
+        alpha:    restart probability
+        multiple: start from multiple seed nodes at once
+
+    returns
+        the output filepath
     """
 
     ## Clear the output file if it exists
     with open(output, 'w') as fl:
         print('\t'.join(['node_from', 'node_to', 'probability']), file=fl)
 
-    for s in seeds:
+    ## Start from all seeds at once...
+    if multiple:
+        prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
 
-        prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
+        _append_ness_output(output, prox_vector, has_p=False)
 
-        ## Save the output
-        prox_vector.sort_values(by='probability', ascending=False).to_csv(
-            output,
-            mode='a',
-            sep='\t',
-            index=False,
-            header=False,
-            columns=['node_from', 'node_to', 'probability']
-        )
+    ## Perform separate walks for each individual seed
+    else:
+        for s in seeds:
+            prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
+
+            _append_ness_output(output, prox_vector, has_p=False)
+
+    return output
 
 
 def distribute_individual_walks(
@@ -279,10 +346,7 @@ def distribute_individual_walks(
         alpha:  restart probability
     """
 
-    log._logger.info('Starting local cluster...')
-
-    ## Start a local cluster utilizing all available cores
-    client = Client(LocalCluster(n_workers=os.cpu_count()))
+    client = get_client()
 
     log._logger.info('Scattering data to workers...')
 
@@ -316,20 +380,19 @@ def distribute_individual_walks(
 
     log._logger.info('Generating output...')
 
-    merge_files(futures, output)
-
-    client.close()
+    _merge_files(futures, output)
 
 
 def _run_individual_permutation_tests(
     matrix: csr_matrix,
-    seed: List[str],
+    seeds: List[str],
     uids: Dict[str, int],
     permutations: int = 250,
     alpha: np.double = 0.15
 ) -> pd.DataFrame:
     """
-    Run permutation tests for individual random walks.
+    Helper function for permutation testing functions. Runs the RWR algorithm and
+    performs permutation testing over permuted graphs for the given seed nodes.
 
     arguments
         matrix: transition probability matrix
@@ -342,7 +405,7 @@ def _run_individual_permutation_tests(
     log._logger.info('Running random walk...')
 
     ## First get the proximity vector for the walk
-    prox_vector = _run_individual_walks(matrix, seed, uids, alpha)
+    prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
 
     log._logger.info('Running permutation tests...')
 
@@ -353,7 +416,7 @@ def _run_individual_permutation_tests(
         permuted_uids = graph.shuffle_node_labels(uids)
 
         ## Run the permuted walk
-        permuted_vector = _run_individual_walks(matrix, seed, permuted_uids, alpha)
+        permuted_vector = _run_individual_walks(matrix, seeds, permuted_uids, alpha)
 
         ## Join on the original results
         prox_vector[f'p_{i}'] = permuted_vector.probability
@@ -367,22 +430,34 @@ def run_individual_permutation_tests(
     uids: Dict[str, int],
     output: str,
     permutations: int = 250,
-    alpha: np.double = 0.15
+    alpha: np.double = 0.15,
+    multiple: bool = False
 ) -> None:
     """
-    Run permutation tests for individual random walks.
+    Run the random walk algorithm for each seed in the given seeds list and also perform
+    permutation testing.
+    This is NOT recommended for large inputs (or even for a single input). It is
+    recommended to use the distributed version of this function when doing permutation
+    testing.
 
     arguments
-        matrix: transition probability matrix
-        seeds:  seed list
-        uids:   UID map
-        output: output filepath
-        alpha:  restart probability
+        matrix:       transition probability matrix
+        seeds:        seed list
+        uids:         UID map
+        output:       output filepath
+        permutations: number of permutations to run
+        alpha:        restart probability
+        multiple:     start from multiple seed nodes at once
     """
 
     ## Clear the output file if it exists
     with open(output, 'w') as fl:
         print('\t'.join(['node_from', 'node_to', 'probability', 'p']), file=fl)
+
+    ## Wraps the list of seeds in one extra list so the for loop below only iterates
+    ## through on loop and the walk starts from all seeds
+    if multiple:
+        seeds = [seeds]
 
     for s in seeds:
 
@@ -392,27 +467,11 @@ def run_individual_permutation_tests(
 
         log._logger.info('Calculating p-values...')
 
-        ## Calculate the p-value using the cumulative probability of observing a walk
-        ## score of equal or greater magnitude
-        prox_vector['p'] = (
-            prox_vector.filter(regex='p_\d+')
-                .apply(lambda x: x >= prox_vector.probability)
-                .select_dtypes(include=['bool'])
-                .sum(axis=1)
-        )
-        prox_vector['p'] = (prox_vector['p'] + 1) / (permutations + 1)
-
-        prox_vector = prox_vector[['node_from', 'node_to', 'probability', 'p']]
+        ## Calculate the p-value
+        prox_vector = _calculate_p(prox_vector, permutations)
 
         ## Save the output
-        prox_vector.sort_values(by='p', ascending=True).to_csv(
-            output,
-            mode='a',
-            sep='\t',
-            index=False,
-            header=False,
-            columns=['node_from', 'node_to', 'probability', 'p']
-        )
+        _append_ness_output(output, prox_vector, has_p=True)
 
 
 def distribute_individual_permutation_tests(
@@ -421,17 +480,22 @@ def distribute_individual_permutation_tests(
     uids: Dict[str, int],
     output: str,
     permutations: int = 250,
-    alpha: np.double = 0.15
+    alpha: np.double = 0.15,
+    multiple: bool = True
 ) -> None:
     """
-    Run permutation tests for individual random walks.
+    Run the random walk algorithm for seeds in the given seeds list and also perform
+    permutation testing.
+    Permutation tests are parallelized and distributed across a local cluster.
 
     arguments
-        matrix: transition probability matrix
-        seeds:  seed list
-        uids:   UID map
-        output: output filepath
-        alpha:  restart probability
+        matrix:       transition probability matrix
+        seeds:        seed list
+        uids:         UID map
+        output:       output filepath
+        permutations: number of permutations to run
+        alpha:        restart probability
+        multiple:     start from multiple seed nodes at once
     """
 
     ## Clear the output file if it exists
