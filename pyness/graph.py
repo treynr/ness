@@ -52,8 +52,8 @@ def encapsulate_bioentities(
     ## Auto assume both nodes in the edge are genes. Should be true in the vast
     ## majority of cases.
     if edges is not None:
-        edges['node_from'] = edges.astype(str).node_from.map(Gene)
-        edges['node_to'] = edges.astype(str).node_tomap(Gene)
+        edges['source'] = edges.astype(str).source.map(Gene)
+        edges['sink'] = edges.astype(str).sink.map(Gene)
 
     if genesets is not None:
         genesets['gsid'] = genesets.astype(str).gsid.map(GeneSet)
@@ -98,8 +98,8 @@ def generate_node_uids(
         entities.extend(annotations.gene.tolist())
 
     if edges is not None:
-        entities.extend(edges.node_from.tolist())
-        entities.extend(edges.node_to.tolist())
+        entities.extend(edges.source.tolist())
+        entities.extend(edges.sink.tolist())
 
     if genesets is not None:
         entities.extend(genesets.gsid.tolist())
@@ -167,7 +167,7 @@ def build_heterogeneous_graph(
 
     if edges is not None:
         relations.extend(
-            edges[['node_from', 'node_to']].itertuples(index=False, name=None)
+            edges[['source', 'sink']].itertuples(index=False, name=None)
         )
 
     if genesets is not None:
@@ -182,7 +182,7 @@ def build_heterogeneous_graph(
 
     if homology is not None:
         relations.extend(
-            ontologies[['cluster', 'gene']].itertuples(index=False, name=None)
+            homology[['cluster', 'gene']].itertuples(index=False, name=None)
         )
 
     mapped_relations = [(uids[a], uids[b]) for a, b in relations]
