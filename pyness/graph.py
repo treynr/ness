@@ -64,11 +64,11 @@ def encapsulate_bioentities(
         ontologies['parent'] = ontologies.astype(str).parent.map(Term)
 
     if homology is not None:
-        homology['child'] = homology.astype(str).cluster.map(Term)
-        homology['parent'] = homology.astype(str).gene.map(Term)
-
+        homology['cluster'] = homology.astype(str).cluster.map(Homolog)
+        homology['gene'] = homology.astype(str).gene.map(Gene)
 
     return (annotations, edges, genesets, ontologies, homology)
+
 
 def generate_node_uids(
     annotations: pd.DataFrame = None,
@@ -217,7 +217,7 @@ def graph_to_sparse_matrix(graph: nx.Graph) -> dok_matrix:
     return matrix
 
 
-def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
+def old_column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
     """
     Column normalize the transition probability matrix.
 
@@ -231,6 +231,30 @@ def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
     for i in range(matrix.shape[1]):
         if matrix[i, :].sum() != 0:
             matrix[i, :] = matrix[i, :] / matrix[i, :].sum()
+
+    return matrix
+
+
+def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
+    """
+    Column normalize the transition probability matrix.
+
+    arguments
+        matrix: graph matrix
+
+    returns
+        normalized matrix
+    """
+
+    ## We do this ugly fucking thing cause it's very, very fast. Like seriously, it's
+    ## a 25x improvement in speed compared to looping
+    matrix.data = (
+        matrix.data /
+        np.repeat(
+            np.add.reduceat(matrix.data, matrix.indptr[:-1]),
+            np.diff(matrix.indptr)
+        )
+    )
 
     return matrix
 
@@ -296,7 +320,7 @@ def build_matrix(hetnet: nx.Graph) -> csr_matrix:
     log._logger.info('Normalizing the transition matrix...')
 
     ## Convert to a CSR matrix prior to normalization for faster slicing
-    matrix = matrix.tocsr()
+    matrix = csr_matrix(matrix)
     matrix = column_normalize_matrix(matrix)
 
     return matrix

@@ -5,6 +5,9 @@
 ## desc: NESS python implementation.
 ## auth: TR
 
+from dask.distributed import Client
+from dask.distributed import LocalCluster
+
 from dask.distributed import get_client
 from pathlib import Path
 from scipy.linalg import norm
@@ -132,15 +135,10 @@ def _map_seed_uids(seeds: List[str], uids: Dict[str, int]) -> List[int]:
     returns
         a list of seed UIDs
     """
-    from .types import GeneSet
 
     seed_uids = []
 
     for s in seeds:
-        #print(uids)
-        #print(s)
-        #print(uids[GeneSet(74017)])
-        #print(uids[s])
         if s not in uids:
             log._logger.warning(f'Skipping seed node {s} which is missing from the graph')
             continue
@@ -609,6 +607,8 @@ def distribute_individual_permutation_tests(
 
 if __name__ == '__main__':
     from . import graph
+    import sparse
+    import dask.array as da
 
     matrix = dok_matrix([
         #[0, 1, 0, 1, 0, 1],
@@ -620,20 +620,60 @@ if __name__ == '__main__':
         [0, 1, 0, 1, 0, 0]
     ], dtype=np.double)
 
-    matrix = dok_matrix([
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0],
-        [0, 1, 0, 0, 1, 0],
-        [0, 1, 0, 0, 0, 0],
-        [0, 1, 0, 1, 0, 0]
-    ], dtype=np.double)
+    #matrix = dok_matrix([
+    #    [0, 0, 0, 0, 0, 0],
+    #    [0, 0, 0, 0, 0, 0],
+    #    [0, 1, 0, 0, 0, 0],
+    #    [0, 1, 0, 0, 1, 0],
+    #    [0, 1, 0, 0, 0, 0],
+    #    [0, 1, 0, 1, 0, 0]
+    #], dtype=np.double)
+
+    def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
+        """
+        Column normalize the transition probability matrix.
+
+        arguments
+            matrix: graph matrix
+
+        returns
+            normalized matrix
+        """
+
+        #matrix = csr_matrix(matrix)
+        for i in range(matrix.shape[1]):
+            if matrix[i, :].sum() != 0:
+                matrix[i, :] = matrix[i, :] / matrix[i, :].sum()
+
+        return matrix
+
+    def column_normalize_matrix2(matrix):
+        """
+        Column normalize the transition probability matrix.
+
+        arguments
+            matrix: graph matrix
+
+        returns
+            normalized matrix
+        """
+
+        matrix.data = matrix.data / np.repeat(np.add.reduceat(matrix.data, matrix.indptr[:-1]), np.diff(matrix.indptr))
+        return matrix
+
+    client = Client(LocalCluster(n_workers=4, processes=False))
+
+    dmatrix = da.from_array(csr_matrix(matrix))
+    print(type(dmatrix))
 
     #matrix[:, 0] = matrix[:, 0].todense() + 1
     #matrix = column_normalize_matrix(matrix)
-    matrix = matrix.tocsr()
-    matrix = graph.column_normalize_matrix(matrix)
-    print(matrix.todense())
+    #matrix = matrix.tocsr()
+    #matrix = graph.column_normalize_matrix(matrix)
+    #print(matrix.todense())
+    print(column_normalize_matrix(csr_matrix(matrix)).todense())
+    print(column_normalize_matrix2(csr_matrix(matrix)))
+    #print(column_normalize_matrix2(matrix).todense())
     exit()
 
     #print(calculate_convergence(
