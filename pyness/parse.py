@@ -33,7 +33,7 @@ def _read_df(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    return pd.read_csv(input, sep='\t')
+    return pd.read_csv(input, sep='\t', comment='#')
 
 
 def parse_seed(seed: str) -> BioEntity:
@@ -47,7 +47,7 @@ def parse_seed(seed: str) -> BioEntity:
         a BioEntity
     """
 
-    biotype, seed = seed.split(':')
+    biotype, seed = seed.split(':', maxsplit=1)
 
     if biotype.lower() == 'gene':
         return Gene(seed)
@@ -191,7 +191,6 @@ def read_ontologies(input: str) -> pd.DataFrame:
     returns
         a dataframe
     """
-
 
     df = _read_df(input)
     df = df.rename(columns={df.columns[0]: 'child', df.columns[1]: 'parent'})
