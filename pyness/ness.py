@@ -187,7 +187,7 @@ def _adjust_fdr(df: pd.DataFrame) -> pd.DataFrame:
         a dataframe with adjust p-values
     """
 
-    df = df.sort_values(by=['p', 'probability']).reset_index(drop=True)
+    df = df.sort_values(by='p').reset_index(drop=True)
     df['q'] = df.p * len(df.index) / (df.index + 1)
     df['q'] = df.q.mask(df.q > 1.0, 1.0)
 
