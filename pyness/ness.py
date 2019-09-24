@@ -105,7 +105,7 @@ def _merge_files(files: List[str], output: str, delete: bool = True) -> None:
     with open(output, 'w') as outfl:
 
         ## Loop through input files...
-        for fpath in sorted(files):
+        for fpath in files:
 
             ## Read each input file and format line x line
             with open(fpath, 'r') as infl:
@@ -113,11 +113,10 @@ def _merge_files(files: List[str], output: str, delete: bool = True) -> None:
                 if not first:
                     ## Skip the header
                     next(infl)
-
                 else:
                     first = False
 
-                    outfl.write(infl.read())
+                outfl.write(infl.read())
 
             ## Remove the file once we're done
             if delete:
@@ -144,6 +143,9 @@ def _map_seed_uids(seeds: List[str], uids: Dict[str, int]) -> List[int]:
             continue
 
         seed_uids.append(uids[s])
+
+    if not seed_uids:
+        log._logger.warning('No seed nodes were mapped to UIDs, cannot perform the RWR')
 
     return seed_uids
 
@@ -308,6 +310,9 @@ def _run_individual_walks(
     ## Map seed UIDs
     mapped_seeds = _map_seed_uids(seeds, uids)
 
+    if not mapped_seeds:
+        return None
+
     ## Walk the graph
     prox_vector = random_walk(matrix, mapped_seeds, alpha)
 
@@ -356,14 +361,16 @@ def run_individual_walks(
     if multiple:
         prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
 
-        _append_ness_output(output, prox_vector, has_p=False)
+        if prox_vector is not None:
+            _append_ness_output(output, prox_vector, has_p=False)
 
     ## Perform separate walks for each individual seed
     else:
         for s in seeds:
             prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
 
-            _append_ness_output(output, prox_vector, has_p=False)
+            if prox_vector is not None:
+                _append_ness_output(output, prox_vector, has_p=False)
 
     return output
 
@@ -391,8 +398,8 @@ def distribute_individual_walks(
     log._logger.info('Scattering data to workers...')
 
     ## Scatter data onto workers
-    matrix = client.scatter(matrix, broadcast=True)
-    uids = client.scatter(uids, broadcast=True)
+    [matrix] = client.scatter([matrix], broadcast=True)
+    [uids] = client.scatter([uids], broadcast=True)
 
     futures = []
 
@@ -400,6 +407,9 @@ def distribute_individual_walks(
 
     ## Split the seed list into chunks
     for chunk in np.array_split(seeds, os.cpu_count()):
+
+        if chunk.size == 0:
+            continue
 
         ## Temp output
         tmp_out = tf.NamedTemporaryFile().name
@@ -415,6 +425,23 @@ def distribute_individual_walks(
         )
 
         futures.append(future)
+
+    #for s in seeds:
+
+    #    ## Temp output
+    #    tmp_out = tf.NamedTemporaryFile().name
+
+    #    ## Run the random walk algorithm for each seed
+    #    future = client.submit(
+    #        run_individual_walks,
+    #        matrix,
+    #        [s],
+    #        uids,
+    #        tmp_out,
+    #        alpha
+    #    )
+
+    #    futures.append(future)
 
     futures = client.gather(futures)
 
