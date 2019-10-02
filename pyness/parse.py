@@ -136,9 +136,10 @@ def read_genesets(input: str) -> pd.DataFrame:
 
     df = _read_df(input)
     df = df.rename(columns={df.columns[0]: 'gsid', df.columns[1]: 'genes'})
+    df = df.astype(str)
 
     ## Genes don't need to be split
-    if not df.genes.str.contains('|').any():
+    if not df.genes.str.contains('|', regex=False).any():
         return df
 
     ## If genes are concatenated, split them up

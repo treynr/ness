@@ -120,7 +120,7 @@ def _register_args(parser: ArgumentParser) -> ArgumentParser:
         '--distributed',
         action='store_true',
         dest='distributed',
-        help='parallelize the random walk using all available cores'
+        help='parallelize the random walk by distributing across available cores'
     )
 
     proc_group.add_argument(

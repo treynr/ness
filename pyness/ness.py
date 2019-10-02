@@ -381,7 +381,8 @@ def distribute_individual_walks(
     seeds: List[str],
     uids: Dict[str, int],
     output: str,
-    alpha: np.double = 0.15
+    alpha: np.double = 0.15,
+    procs: int = os.cpu_count()
 ) -> None:
     """
     Run the random walk algorithm.
@@ -396,21 +397,13 @@ def distribute_individual_walks(
 
     client = get_client()
 
-    log._logger.info('Scattering data to workers...')
-
-    ## Scatter data onto workers
+    ## Scatter data onto all the workers
     [matrix] = client.scatter([matrix], broadcast=True)
     [uids] = client.scatter([uids], broadcast=True)
 
     futures = []
 
-    log._logger.info('Walking the graph...')
-
-    ## Split the seed list into chunks
-    seed_chunks = len(list(client.scheduler_info()['workers'].keys())) * 1.5
-
-    #for chunk in np.array_split(seeds, os.cpu_count()):
-    for chunk in np.array_split(seeds, seed_chunks):
+    for chunk in np.array_split(seeds, procs):
 
         if chunk.size == 0:
             continue

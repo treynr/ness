@@ -57,7 +57,7 @@ def encapsulate_bioentities(
 
     if genesets is not None:
         genesets['gsid'] = genesets.astype(str).gsid.map(GeneSet)
-        genesets['gene'] = genesets.astype(str).gene.map(Gene)
+        genesets['gene'] = genesets.astype(str).genes.map(Gene)
 
     if ontologies is not None:
         ontologies['child'] = ontologies.astype(str).child.map(Term)

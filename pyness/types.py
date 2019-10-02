@@ -22,6 +22,9 @@ class BioEntity:
 
         return f'{self.biotype}:{self.id}'
 
+    def has_id(self, s: str):
+        return self.id == s
+
 
 @dataclass(repr=True, eq=True, order=True, frozen=True)
 class Gene(BioEntity):

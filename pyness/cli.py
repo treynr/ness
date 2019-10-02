@@ -9,6 +9,7 @@ from dask.distributed import Client
 from dask.distributed import LocalCluster
 from functools import partial
 import logging
+import tempfile as tf
 
 from . import arguments
 from . import log
@@ -42,9 +43,19 @@ def _main() -> None:
 
         seeds = []
 
+    #print(seeds[:5])
     inputs = parse.read_inputs(args)
     uids, hetnet = graph.build_graph(inputs)
     matrix = graph.build_matrix(hetnet)
+    #print(list(uids.keys())[:5])
+
+    #for s in seeds:
+    #    if s not in uids:
+    #        print(f'{s} not in uid')
+
+    #for s in uids.keys():
+    #    if s.biotype == 'geneset':
+    #        print(s)
 
     ## Using all nodes in the graph
     if not seeds:
@@ -69,7 +80,11 @@ def _main() -> None:
             if args.distributed:
 
                 ## Start a local cluster utilizing the specified number of cores
-                client = Client(LocalCluster(n_workers=args.cores))
+                client = Client(LocalCluster(
+                    n_workers=args.cores,
+                    processes=True,
+                    local_directory=tf.gettempdir()
+                ))
 
                 ## Run the logging init function on each worker and register the callback so
                 ## future workers also run the function
@@ -98,13 +113,24 @@ def _main() -> None:
         ## No permutation testing, just the walk...
         else:
             if args.distributed:
+
+                log._logger.info(f'Starting local cluster: {args.cores} cores...')
+
                 ## Start a local cluster utilizing the specified number of cores
-                client = Client(LocalCluster(n_workers=args.cores))
+                client = Client(LocalCluster(
+                    n_workers=args.cores,
+                    processes=True,
+                    local_directory=tf.gettempdir()
+                ))
+
+                log._logger.info(f'Started local cluster...')
 
                 ## Run the logging init function on each worker and register the callback so
                 ## future workers also run the function
                 init_logging_partial = partial(log._initialize_logging, verbose=args.verbose)
                 client.register_worker_callbacks(setup=init_logging_partial)
+
+                log._logger.info(f'Walking the graph...')
 
                 ness.distribute_individual_walks(
                     matrix, seeds, uids, args.output, args.restart
