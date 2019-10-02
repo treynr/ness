@@ -48,7 +48,7 @@ def _main() -> None:
 
     ## Using all nodes in the graph
     if not seeds:
-        seeds = uids.values()
+        seeds = list(uids.keys())
 
     if args.multiple:
         if args.permutations:

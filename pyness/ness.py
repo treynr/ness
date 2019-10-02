@@ -9,6 +9,7 @@ from dask.distributed import Client
 from dask.distributed import LocalCluster
 
 from dask.distributed import get_client
+from math import floor
 from pathlib import Path
 from scipy.linalg import norm
 from scipy.sparse import csr_matrix
@@ -406,7 +407,10 @@ def distribute_individual_walks(
     log._logger.info('Walking the graph...')
 
     ## Split the seed list into chunks
-    for chunk in np.array_split(seeds, os.cpu_count()):
+    seed_chunks = len(list(client.scheduler_info()['workers'].keys())) * 1.5
+
+    #for chunk in np.array_split(seeds, os.cpu_count()):
+    for chunk in np.array_split(seeds, seed_chunks):
 
         if chunk.size == 0:
             continue
