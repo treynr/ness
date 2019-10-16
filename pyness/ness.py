@@ -7,7 +7,6 @@
 
 from dask.distributed import Client
 from dask.distributed import LocalCluster
-
 from dask.distributed import get_client
 from math import floor
 from pathlib import Path
@@ -22,6 +21,8 @@ import networkx as nx
 import pandas as pd
 import os
 import tempfile as tf
+
+import time
 
 from . import graph
 from . import log
@@ -397,13 +398,14 @@ def distribute_individual_walks(
 
     client = get_client()
 
+
     ## Scatter data onto all the workers
     [matrix] = client.scatter([matrix], broadcast=True)
     [uids] = client.scatter([uids], broadcast=True)
 
     futures = []
 
-    for chunk in np.array_split(seeds, procs):
+    for chunk in np.array_split(seeds, floor(procs + (procs / 2))):
 
         if chunk.size == 0:
             continue
@@ -441,6 +443,7 @@ def distribute_individual_walks(
     #    futures.append(future)
 
     futures = client.gather(futures)
+
 
     log._logger.info('Generating output...')
 
@@ -539,6 +542,7 @@ def distribute_individual_permutation_tests(
     output: str,
     permutations: int = 250,
     alpha: np.double = 0.15,
+    procs: int = os.cpu_count(),
     multiple: bool = True,
     fdr: bool = False
 ) -> None:
@@ -562,8 +566,8 @@ def distribute_individual_permutation_tests(
     log._logger.info('Scattering data to workers...')
 
     ## Scatter data onto workers
-    matrix = client.scatter(matrix, broadcast=True)
-    uids = client.scatter(uids, broadcast=True)
+    [matrix] = client.scatter([matrix], broadcast=True)
+    [uids] = client.scatter([uids], broadcast=True)
 
     futures = []
 
@@ -572,14 +576,15 @@ def distribute_individual_permutation_tests(
         log._logger.info('Running permutation tests...')
 
         permuted_futures = []
-        s = client.scatter([s], broadcast=True)
+        [s] = client.scatter([s], broadcast=True)
 
         ## Splits up the permutation test based on the number of workers
-        div = len(list(client.nthreads().keys()))
+        #div = len(list(client.nthreads().keys()))
 
         ## Split the number of permutations evenly
         #for chunk in np.array_split(np.zeros(permutations), os.cpu_count()):
-        for chunk in np.array_split(np.zeros(permutations), div):
+        #for chunk in np.array_split(np.zeros(permutations), div):
+        for chunk in np.array_split(np.zeros(permutations), procs):
 
             prox_vector_future = client.submit(
                 _run_individual_permutation_tests,
