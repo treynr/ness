@@ -7,9 +7,9 @@ jobs:
     steps:
       - checkout
 
-      - restore_cache:
-          name: Restore cached dependencies
-          key: pyness-{{ checksum "requirements.dev.txt" }}
+      #- restore_cache:
+      #    name: Restore cached dependencies
+      #    key: pyness-{{ checksum "requirements.dev.txt" }}
 
       - run:
           name: Install virtual environment
@@ -29,6 +29,7 @@ jobs:
           name: Install dependencies
           command: |
             eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)"
             pyenv virtualenv ness
             pyenv activate ness
             pip install -r requirements.dev.txt
@@ -37,6 +38,7 @@ jobs:
           name: Run tests
           command: |
             eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)"
             pyenv activate ness
             PYTHONPATH=. pytest tests -v
 
@@ -44,6 +46,7 @@ jobs:
           name: Type checks
           command: |
             eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)"
             pyenv activate ness
             mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/log.py
             mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/graph.py
@@ -55,6 +58,7 @@ jobs:
           name: Style checks
           command: |
             eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)"
             pyenv activate ness
             flake8 pyness
 
