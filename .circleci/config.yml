@@ -13,7 +13,7 @@ jobs:
 
       - run:
           name: Install dependencies
-          command: pip install -r requirements.dev.txt
+          command: sudo pip install -r requirements.dev.txt
 
       - run:
           name: Run tests
