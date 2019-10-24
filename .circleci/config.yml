@@ -11,7 +11,7 @@ jobs:
 
       - restore_cache:
           name: Restore cached dependencies
-          key: pyness-{{ checksum "requirements.dev.txt" }}
+          key: pyness-v1.0.0-{{ checksum "requirements.dev.txt" }}
 
       - run:
           name: Install dependencies
@@ -36,7 +36,7 @@ jobs:
 
       - save_cache:
           name: Cache dependencies
-          key: pyness-{{ checksum "requirements.dev.txt" }}
+          key: pyness-v1.0.0-{{ checksum "requirements.dev.txt" }}
           paths:
             - /usr/local/lib/python3.7/site-packages
             - /usr/local/bin
