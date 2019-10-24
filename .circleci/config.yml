@@ -9,9 +9,9 @@ jobs:
 
       - run: sudo chown -R circleci:circleci /usr/local/lib/python3.7/site-packages
 
-      #- restore_cache:
-      #    name: Restore cached dependencies
-      #    key: pyness-{{ checksum "requirements.dev.txt" }}
+      - restore_cache:
+          name: Restore cached dependencies
+          key: pyness-{{ checksum "requirements.dev.txt" }}
 
       - run:
           name: Install dependencies
@@ -39,3 +39,4 @@ jobs:
           key: pyness-{{ checksum "requirements.dev.txt" }}
           paths:
             - /usr/local/lib/python3.7/site-packages
+            - /usr/local/bin
