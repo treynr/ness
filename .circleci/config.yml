@@ -15,27 +15,36 @@ jobs:
           name: Install virtual environment
           command: |
             curl https://pyenv.run | bash
-            #git clone https://github.com/pyenv/pyenv-virtualenv.git $HOME/.pyenv/plugins/pyenv-virtualenv
-            #exec $SHELL
+            export PATH="$HOME/.pyenv/bin:$PATH"
+            echo "export PATH=$HOME/.pyenv/bin:$PATH" >> $BASH_ENV
+            echo "export PYENV_ROOT=$HOME/.pyenv" >> $BASH_ENV
+            # git clone https://github.com/pyenv/pyenv-virtualenv.git $HOME/.pyenv/plugins/pyenv-virtualenv
+            # exec $SHELL
 
-      - run:
-          name: Configure virtual environment
-          command: |
-            pyenv virtualenv ness
-            pyenv activate ness
+      # - run:
+      #     name: Configure virtual environment
+      #     command: |
 
       - run:
           name: Install dependencies
           command: |
+            eval "$(pyenv init -)"
+            pyenv virtualenv ness
+            pyenv activate ness
             pip install -r requirements.dev.txt
 
       - run:
           name: Run tests
-          command: PYTHONPATH=. pytest tests -v
+          command: |
+            eval "$(pyenv init -)"
+            pyenv activate ness
+            PYTHONPATH=. pytest tests -v
 
       - run:
           name: Type checks
           command: |
+            eval "$(pyenv init -)"
+            pyenv activate ness
             mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/log.py
             mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/graph.py
             mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/ness.py
@@ -44,7 +53,10 @@ jobs:
 
       - run:
           name: Style checks
-          command: flake8 pyness
+          command: |
+            eval "$(pyenv init -)"
+            pyenv activate ness
+            flake8 pyness
 
       - save_cache:
           name: Cache dependencies
