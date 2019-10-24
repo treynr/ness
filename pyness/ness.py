@@ -5,75 +5,65 @@
 ## desc: NESS python implementation.
 ## auth: TR
 
-from dask.distributed import Client
-from dask.distributed import LocalCluster
-
 from dask.distributed import get_client
 from math import floor
 from pathlib import Path
 from scipy.linalg import norm
 from scipy.sparse import csr_matrix
-from scipy.sparse import dok_matrix
 from typing import Dict
 from typing import List
 import logging
 import numpy as np
-import networkx as nx
 import pandas as pd
 import os
 import tempfile as tf
 
 from . import graph
 from . import log
+from . import types
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-def _make_ness_header_output(output: str, vector: pd.DataFrame) -> None:
+def _make_ness_header_output(output: str, p: bool = False, q: bool = False) -> None:
     """
     Write the NESS header output to a file.
 
     arguments
         output: output filepath
-        vector: proximity vector results
     """
 
-    if 'q' in vector.columns:
-        columns = ['node_from', 'node_to', 'probability', 'p', 'q']
-    elif 'p' in vector.columns:
-        columns = ['node_from', 'node_to', 'probability', 'p']
-    else:
-        columns = ['node_from', 'node_to', 'probability']
+    columns = ['node_from', 'from_biotype', 'node_to', 'to_biotype', 'probability']
 
-    vector.iloc[0:0].to_csv(output, sep='\t', index=False, columns=columns)
+    if p:
+        columns.append('p')
+    if q:
+        columns.append('q')
+
+    with open(output, 'w') as fl:
+        print('\t'.join(columns), file=fl)
 
 
-def _append_ness_output(
-    output: str,
-    vector: pd.DataFrame,
-    has_p: bool = False,
-    has_q: bool = False
-) -> None:
+def _append_ness_output(output: str, vector: pd.DataFrame) -> None:
     """
     Append NESS output to the given file.
 
     arguments
         output: output filepath
         vector: proximity vector results
-        has_p:  if true, the vector also contains p-values from permutation testing
-        has_q:  if true, the vector also contains adjusted p-values (q-values)
     """
 
+    columns = ['node_from', 'from_biotype', 'node_to', 'to_biotype', 'probability']
+
     if 'q' in vector.columns:
-        columns = ['node_from', 'node_to', 'probability', 'p', 'q']
+        columns.extend(['p', 'q'])
         vector = vector.sort_values(by='q', ascending=True)
 
     elif 'p' in vector.columns:
-        columns = ['node_from', 'node_to', 'probability', 'p']
+        columns.append('p')
         vector = vector.sort_values(by='p', ascending=True)
 
     else:
-        columns = ['node_from', 'node_to', 'probability']
         vector = vector.sort_values(by='probability', ascending=False)
 
     vector.to_csv(
@@ -98,7 +88,7 @@ def _merge_files(files: List[str], output: str, delete: bool = True) -> None:
     """
 
     if not files:
-        return output
+        return
 
     first = True
 
@@ -124,7 +114,7 @@ def _merge_files(files: List[str], output: str, delete: bool = True) -> None:
                 Path(fpath).unlink()
 
 
-def _map_seed_uids(seeds: List[str], uids: Dict[str, int]) -> List[int]:
+def _map_seed_uids(seeds: List[types.BioEntity], uids: Dict[types.BioEntity, int]) -> List[int]:
     """
     Map seed nodes to their UIDs.
 
@@ -168,7 +158,7 @@ def _calculate_p(vector: pd.DataFrame, n: int) -> pd.DataFrame:
     ## of equal or greater magnitude than the one originally observed, sum the scores,
     ## then calculate the p-value.
     vector['p'] = (
-        vector.filter(regex='p_\d+')
+        vector.filter(regex=r'p_\d+')
             .apply(lambda x: x >= vector.probability)
             .select_dtypes(include=['bool'])
             .sum(axis=1)
@@ -289,9 +279,10 @@ def random_walk(matrix, seeds, alpha, threshold=1.0e-8):
 
 def _run_individual_walks(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
-    alpha: np.double = 0.15
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
+    alpha: np.double = 0.15,
+    single: bool = False
 ) -> pd.DataFrame:
     """
     Run the random walk algorithm. Helper function called by the run_* and distribute_*
@@ -303,10 +294,11 @@ def _run_individual_walks(
         uids:   UID map
         output: output filepath
         alpha:  restart probability
+        single: run a single walk startng from all seed nodes at once
     """
 
-    ## Reverse UID mapping
-    reverse_uids = dict([(b, a) for a, b in uids.items()])
+    ## Reverse UID -> bioentity mapping
+    revuids = dict([(b, a) for a, b in uids.items()])
 
     ## Map seed UIDs
     mapped_seeds = _map_seed_uids(seeds, uids)
@@ -322,48 +314,54 @@ def _run_individual_walks(
     prox_vector = prox_vector.reset_index(drop=False)
 
     ## Map bio-entities back from UIDs
-    prox_vector['node_to'] = prox_vector['index'].map(reverse_uids)
-    prox_vector['node_to'] = prox_vector.node_to.map(str)
+    prox_vector[['node_to', 'to_biotype']] = (pd.DataFrame(
+        prox_vector['index']
+            .map(revuids)
+            .map(lambda b: [b.id, b.biotype])
+            .tolist()
+    ))
 
     ## Add the seed node
-    prox_vector['node_from'] = ';'.join([str(reverse_uids[s]) for s in mapped_seeds])
+    prox_vector['node_from'] = ';'.join([revuids[s].id for s in mapped_seeds])
+    prox_vector['from_biotype'] = ';'.join([revuids[s].biotype for s in mapped_seeds])
 
     return prox_vector
 
 
 def run_individual_walks(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
     output: str,
     alpha: np.double = 0.15,
-    multiple: bool = False
+    single: bool = False
 ) -> str:
     """
     Run the random walk algorithm for each seed in the given seeds list.
 
     arguments
-        matrix:   transition probability matrix
-        seeds:    seed list
-        uids:     UID map
-        output:   output filepath
-        alpha:    restart probability
-        multiple: start from multiple seed nodes at once
+        matrix: transition probability matrix
+        seeds:  seed list
+        uids:   UID map
+        output: output filepath
+        alpha:  restart probability
+        single: run a single walk startng from all seed nodes at once
 
     returns
         the output filepath
     """
 
     ## Clear the output file if it exists
-    with open(output, 'w') as fl:
-        print('\t'.join(['node_from', 'node_to', 'probability']), file=fl)
+    _make_ness_header_output(output)
+
+    log._logger.info('Walking the graph...')
 
     ## Start from all seeds at once...
-    if multiple:
+    if single:
         prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
 
         if prox_vector is not None:
-            _append_ness_output(output, prox_vector, has_p=False)
+            _append_ness_output(output, prox_vector)
 
     ## Perform separate walks for each individual seed
     else:
@@ -371,15 +369,15 @@ def run_individual_walks(
             prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
 
             if prox_vector is not None:
-                _append_ness_output(output, prox_vector, has_p=False)
+                _append_ness_output(output, prox_vector)
 
     return output
 
 
 def distribute_individual_walks(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
     output: str,
     alpha: np.double = 0.15,
     procs: int = os.cpu_count()
@@ -403,7 +401,7 @@ def distribute_individual_walks(
 
     futures = []
 
-    for chunk in np.array_split(seeds, procs):
+    for chunk in np.array_split(seeds, floor(procs + (procs / 2))):
 
         if chunk.size == 0:
             continue
@@ -423,23 +421,6 @@ def distribute_individual_walks(
 
         futures.append(future)
 
-    #for s in seeds:
-
-    #    ## Temp output
-    #    tmp_out = tf.NamedTemporaryFile().name
-
-    #    ## Run the random walk algorithm for each seed
-    #    future = client.submit(
-    #        run_individual_walks,
-    #        matrix,
-    #        [s],
-    #        uids,
-    #        tmp_out,
-    #        alpha
-    #    )
-
-    #    futures.append(future)
-
     futures = client.gather(futures)
 
     log._logger.info('Generating output...')
@@ -449,10 +430,11 @@ def distribute_individual_walks(
 
 def _run_individual_permutation_tests(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
     permutations: int = 250,
-    alpha: np.double = 0.15
+    alpha: np.double = 0.15,
+    single: bool = False
 ) -> pd.DataFrame:
     """
     Helper function for permutation testing functions. Runs the RWR algorithm and
@@ -464,6 +446,7 @@ def _run_individual_permutation_tests(
         uids:   UID map
         output: output filepath
         alpha:  restart probability
+        single: perform a single random walk from all seed nodes at once
     """
 
     ## First get the proximity vector for the walk
@@ -486,12 +469,12 @@ def _run_individual_permutation_tests(
 
 def run_individual_permutation_tests(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
     output: str,
     permutations: int = 250,
     alpha: np.double = 0.15,
-    multiple: bool = False
+    single: bool = False
 ) -> None:
     """
     Run the random walk algorithm for each seed in the given seeds list and also perform
@@ -507,17 +490,16 @@ def run_individual_permutation_tests(
         output:       output filepath
         permutations: number of permutations to run
         alpha:        restart probability
-        multiple:     start from multiple seed nodes at once
+        single:     start from multiple seed nodes at once
     """
 
     ## Clear the output file if it exists
-    with open(output, 'w') as fl:
-        print('\t'.join(['node_from', 'node_to', 'probability', 'p']), file=fl)
+    _make_ness_header_output(output)
 
     ## Wraps the list of seeds in one extra list so the for loop below only iterates
     ## through on loop and the walk starts from all seeds
-    if multiple:
-        seeds = [seeds]
+    if single:
+        seeds = [seeds] # type: ignore
 
     for s in seeds:
 
@@ -529,17 +511,18 @@ def run_individual_permutation_tests(
         prox_vector = _calculate_p(prox_vector, permutations)
 
         ## Save the output
-        _append_ness_output(output, prox_vector, has_p=True)
+        _append_ness_output(output, prox_vector)
 
 
 def distribute_individual_permutation_tests(
     matrix: csr_matrix,
-    seeds: List[str],
-    uids: Dict[str, int],
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
     output: str,
     permutations: int = 250,
     alpha: np.double = 0.15,
-    multiple: bool = True,
+    procs: int = os.cpu_count(),
+    single: bool = True,
     fdr: bool = False
 ) -> None:
     """
@@ -554,7 +537,7 @@ def distribute_individual_permutation_tests(
         output:       output filepath
         permutations: number of permutations to run
         alpha:        restart probability
-        multiple:     start from multiple seed nodes at once
+        single:       start from multiple seed nodes at once
     """
 
     client = get_client()
@@ -562,24 +545,22 @@ def distribute_individual_permutation_tests(
     log._logger.info('Scattering data to workers...')
 
     ## Scatter data onto workers
-    matrix = client.scatter(matrix, broadcast=True)
-    uids = client.scatter(uids, broadcast=True)
-
+    [matrix] = client.scatter([matrix], broadcast=True)
+    [uids] = client.scatter([uids], broadcast=True)
     futures = []
+
+    if single:
+        seeds = [seeds] # type: ignore
 
     for s in seeds:
 
         log._logger.info('Running permutation tests...')
 
         permuted_futures = []
-        s = client.scatter([s], broadcast=True)
-
-        ## Splits up the permutation test based on the number of workers
-        div = len(list(client.nthreads().keys()))
+        [s] = client.scatter([s], broadcast=True)
 
         ## Split the number of permutations evenly
-        #for chunk in np.array_split(np.zeros(permutations), os.cpu_count()):
-        for chunk in np.array_split(np.zeros(permutations), div):
+        for chunk in np.array_split(np.zeros(permutations), procs):
 
             prox_vector_future = client.submit(
                 _run_individual_permutation_tests,
@@ -623,109 +604,8 @@ def distribute_individual_permutation_tests(
 
         ## Create a new file if necessary
         if i == 0:
-            _make_ness_header_output(output, prox_vector)
+            _make_ness_header_output(output, p=True, q=fdr)
 
         ## Save the output
         _append_ness_output(output, prox_vector)
 
-
-if __name__ == '__main__':
-    from . import graph
-    import sparse
-    import dask.array as da
-
-    matrix = dok_matrix([
-        #[0, 1, 0, 1, 0, 1],
-        [0, 0, 0, 0, 0, 0],
-        [1, 0, 1, 0, 0, 0],
-        [1, 1, 0, 0, 0, 0],
-        [0, 1, 0, 0, 1, 0],
-        [0, 1, 0, 0, 0, 0],
-        [0, 1, 0, 1, 0, 0]
-    ], dtype=np.double)
-
-    #matrix = dok_matrix([
-    #    [0, 0, 0, 0, 0, 0],
-    #    [0, 0, 0, 0, 0, 0],
-    #    [0, 1, 0, 0, 0, 0],
-    #    [0, 1, 0, 0, 1, 0],
-    #    [0, 1, 0, 0, 0, 0],
-    #    [0, 1, 0, 1, 0, 0]
-    #], dtype=np.double)
-
-    def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
-        """
-        Column normalize the transition probability matrix.
-
-        arguments
-            matrix: graph matrix
-
-        returns
-            normalized matrix
-        """
-
-        #matrix = csr_matrix(matrix)
-        for i in range(matrix.shape[1]):
-            if matrix[i, :].sum() != 0:
-                matrix[i, :] = matrix[i, :] / matrix[i, :].sum()
-
-        return matrix
-
-    def column_normalize_matrix2(matrix):
-        """
-        Column normalize the transition probability matrix.
-
-        arguments
-            matrix: graph matrix
-
-        returns
-            normalized matrix
-        """
-
-        matrix.data = matrix.data / np.repeat(np.add.reduceat(matrix.data, matrix.indptr[:-1]), np.diff(matrix.indptr))
-        return matrix
-
-    client = Client(LocalCluster(n_workers=4, processes=False))
-
-    dmatrix = da.from_array(csr_matrix(matrix))
-    print(type(dmatrix))
-
-    #matrix[:, 0] = matrix[:, 0].todense() + 1
-    #matrix = column_normalize_matrix(matrix)
-    #matrix = matrix.tocsr()
-    #matrix = graph.column_normalize_matrix(matrix)
-    #print(matrix.todense())
-    print(column_normalize_matrix(csr_matrix(matrix)).todense())
-    print(column_normalize_matrix2(csr_matrix(matrix)))
-    #print(column_normalize_matrix2(matrix).todense())
-    exit()
-
-    #print(calculate_convergence(
-    #    initialize_proximity_vector(6, [0]),
-    #    vec
-    #))
-    print(random_walk(matrix, [0], 0.15))
-    print(random_walk(matrix, [1], 0.15))
-
-    print('Generating graph...')
-
-    graph = nx.fast_gnp_random_graph(2000, 0.3)
-
-    print('Converting to matrix...')
-
-    matrix = graph_to_matrix(graph)
-    matrix = column_normalize_matrix(matrix)
-    matrix = csr_matrix(matrix)
-
-    matrix.eliminate_zeros()
-
-    print(matrix[:,0])
-
-    print('Walking graph...')
-
-    vec = random_walk(matrix, [0], 0.15)
-    vec2 = random_walk(matrix, [1], 0.15)
-
-    print(vec[vec > 0])
-    print(vec2[vec2 > 0])
-    #print(list(graph.nodes)[:10])

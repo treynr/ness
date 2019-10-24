@@ -9,6 +9,8 @@ from itertools import count
 from scipy.sparse import csr_matrix
 from scipy.sparse import dok_matrix
 from typing import Dict
+from typing import List
+from typing import Tuple
 import logging
 import networkx as nx
 import numpy as np
@@ -19,11 +21,13 @@ from .types import Gene
 from .types import GeneSet
 from .types import Homolog
 from .types import Term
+from .types import BioEntity
+from .types import Inputs
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
-def encapsulate_bioentities(
+def encapsulate_bioentities2(
     annotations: pd.DataFrame = None,
     edges: pd.DataFrame = None,
     genesets: pd.DataFrame = None,
@@ -31,8 +35,7 @@ def encapsulate_bioentities(
     homology: pd.DataFrame = None,
 ) -> tuple:
     """
-    Wraps the parsed genes, sets, terms, and homologs in dataclasses so duplicate
-    IDs can be distinguished from one another.
+    Wraps the parsed genes, sets, terms, and homologs in the BioEntity dataclass.
 
     arguments
         annotations: ontology or geneset annotations
@@ -70,55 +73,110 @@ def encapsulate_bioentities(
     return (annotations, edges, genesets, ontologies, homology)
 
 
-def generate_node_uids(
-    annotations: pd.DataFrame = None,
-    edges: pd.DataFrame = None,
-    genesets: pd.DataFrame = None,
-    ontologies: pd.DataFrame = None,
-    homology: pd.DataFrame = None,
-) -> Dict[str, int]:
+def encapsulate_bioentities(inputs: Inputs) -> Inputs:
     """
-    Generate UIDs for bio-entities from the given relationships.
+    Wraps the parsed genes, sets, terms, and homologs in the BioEntity dataclass.
 
     arguments
-        annotations: ontology or geneset annotations
-        edges:       edges from bio networks
-        genesets:    gene sets
-        ontologies:  ontology relationships
-        homology:    homologs
+        inputs: Inputs dataclass containing various NESS user inputs
 
     returns
-        a dict mapping bio-entities to their UIDs
+        a modified Inputs dataclass containing user inputs encapsulated in the
+        BioEntity dataclass
     """
 
-    entities = []
+    if inputs.annotations is not None:
+        inputs.annotations['term'] = (
+            inputs.annotations[['term', 'biotype1']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
+        inputs.annotations['gene'] = (
+            inputs.annotations[['gene', 'biotype2']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
 
-    if annotations is not None:
-        entities.extend(annotations.term.tolist())
-        entities.extend(annotations.gene.tolist())
+    if inputs.edges is not None:
+        inputs.edges['source'] = (
+            inputs.edges[['source', 'biotype1']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
+        inputs.edges['sink'] = (
+            inputs.edges[['sink', 'biotype2']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
 
-    if edges is not None:
-        entities.extend(edges.source.tolist())
-        entities.extend(edges.sink.tolist())
+    if inputs.genesets is not None:
+        inputs.genesets['geneset'] = (
+            inputs.genesets[['geneset', 'biotype1']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
+        inputs.genesets['gene'] = (
+            inputs.genesets[['gene', 'biotype2']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
 
-    if genesets is not None:
-        entities.extend(genesets.gsid.tolist())
-        entities.extend(genesets.gene.tolist())
+    if inputs.ontologies is not None:
+        inputs.ontologies['child'] = (
+            inputs.ontologies[['child', 'biotype1']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
+        inputs.ontologies['parent'] = (
+            inputs.ontologies[['parent', 'biotype2']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
 
-    if ontologies is not None:
-        entities.extend(ontologies.child.tolist())
-        entities.extend(ontologies.parent.tolist())
+    if inputs.homology is not None:
+        inputs.homology['cluster'] = (
+            inputs.homology[['cluster', 'biotype1']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
+        inputs.homology['gene'] = (
+            inputs.homology[['gene', 'biotype2']]
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+        )
 
-    if homology is not None:
-        entities.extend(homology.cluster.tolist())
-        entities.extend(homology.gene.tolist())
+    return inputs
+
+
+def generate_node_uids(inputs: Inputs) -> Dict[BioEntity, int]:
+    """
+    Generate UIDs for bioentities from the given relationships.
+
+    arguments
+        inputs: an Inputs dataclass containing various NESS user inputs
+
+    returns
+        a dict mapping bioentities to their UIDs
+    """
+
+    entities: List[BioEntity] = []
+
+    if inputs.annotations is not None:
+        entities.extend(inputs.annotations.term.tolist())
+        entities.extend(inputs.annotations.gene.tolist())
+
+    if inputs.edges is not None:
+        entities.extend(inputs.edges.source.tolist())
+        entities.extend(inputs.edges.sink.tolist())
+
+    if inputs.genesets is not None:
+        entities.extend(inputs.genesets.geneset.tolist())
+        entities.extend(inputs.genesets.gene.tolist())
+
+    if inputs.ontologies is not None:
+        entities.extend(inputs.ontologies.child.tolist())
+        entities.extend(inputs.ontologies.parent.tolist())
+
+    if inputs.homology is not None:
+        entities.extend(inputs.homology.cluster.tolist())
+        entities.extend(inputs.homology.gene.tolist())
 
     entities = pd.Series(entities).drop_duplicates()
 
     return dict(zip(entities, count()))
 
 
-def shuffle_node_labels(uids: Dict[str, int]) -> Dict[str, int]:
+def shuffle_node_labels(uids: Dict[BioEntity, int]) -> Dict[BioEntity, int]:
     """
     Shuffle graph node labels for permutation testing.
 
@@ -135,54 +193,48 @@ def shuffle_node_labels(uids: Dict[str, int]) -> Dict[str, int]:
 
 
 def build_heterogeneous_graph(
-    uids: Dict[str, int],
-    annotations: pd.DataFrame = None,
-    edges: pd.DataFrame = None,
-    genesets: pd.DataFrame = None,
-    ontologies: pd.DataFrame = None,
-    homology: pd.DataFrame = None,
+    uids: Dict[BioEntity, int],
+    inputs: Inputs,
     undirected: bool = True
 ) -> nx.DiGraph:
     """
     Build the heterogeneous graph.
 
     arguments
-        uids:        node UID map
-        annotations: ontology or geneset annotations
-        edges:       edges from bio networks
-        genesets:    gene sets
-        ontologies:  ontology relationships
-        homology:    homologs
+        uids:       node UID map
+        inputs:     an Inputs dataclass containing various NESS user inputs
+        undirected: if true use undirected edges
 
     returns
-        the hetnetwork
+        the hetnet
     """
 
-    relations = []
+    ## the python "type" system is fucking dumb
+    relations: List[Tuple[BioEntity, BioEntity]] = []
 
-    if annotations is not None:
+    if inputs.annotations is not None:
         relations.extend(
-            annotations[['term', 'gene']].itertuples(index=False, name=None)
+            inputs.annotations[['term', 'gene']].itertuples(index=False, name=None)
         )
 
-    if edges is not None:
+    if inputs.edges is not None:
         relations.extend(
-            edges[['source', 'sink']].itertuples(index=False, name=None)
+            inputs.edges[['source', 'sink']].itertuples(index=False, name=None)
         )
 
-    if genesets is not None:
+    if inputs.genesets is not None:
         relations.extend(
-            genesets[['gsid', 'gene']].itertuples(index=False, name=None)
+            inputs.genesets[['geneset', 'gene']].itertuples(index=False, name=None)
         )
 
-    if ontologies is not None:
+    if inputs.ontologies is not None:
         relations.extend(
-            ontologies[['child', 'parent']].itertuples(index=False, name=None)
+            inputs.ontologies[['child', 'parent']].itertuples(index=False, name=None)
         )
 
-    if homology is not None:
+    if inputs.homology is not None:
         relations.extend(
-            homology[['cluster', 'gene']].itertuples(index=False, name=None)
+            inputs.homology[['cluster', 'gene']].itertuples(index=False, name=None)
         )
 
     mapped_relations = [(uids[a], uids[b]) for a, b in relations]
@@ -259,7 +311,7 @@ def column_normalize_matrix(matrix: csr_matrix) -> csr_matrix:
     return matrix
 
 
-def build_graph(inputs: Dict[str, pd.DataFrame]) -> nx.Graph:
+def build_graph(inputs: Inputs) -> Tuple:
     """
     Build the heterogeneous graph from NESS inputs.
 
@@ -272,32 +324,12 @@ def build_graph(inputs: Dict[str, pd.DataFrame]) -> nx.Graph:
 
     log._logger.info('Generating node UIDs...')
 
-    annotations, edges, genesets, ontologies, homology = encapsulate_bioentities(
-        annotations=inputs.annotations,
-        edges=inputs.edges,
-        genesets=inputs.genesets,
-        ontologies=inputs.ontologies,
-        homology=inputs.homology
-    )
-
-    uids = generate_node_uids(
-        annotations=annotations,
-        edges=edges,
-        genesets=genesets,
-        ontologies=ontologies,
-        homology=homology
-    )
+    wrapped_inputs = encapsulate_bioentities(inputs)
+    uids = generate_node_uids(wrapped_inputs)
 
     log._logger.info('Building the heterogeneous graph...')
 
-    hetnet = build_heterogeneous_graph(
-        uids,
-        annotations=annotations,
-        edges=edges,
-        genesets=genesets,
-        ontologies=ontologies,
-        homology=homology
-    )
+    hetnet = build_heterogeneous_graph(uids, wrapped_inputs)
 
     return (uids, hetnet)
 

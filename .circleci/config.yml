@@ -1,0 +1,49 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/python:3.7.2
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          name: Restore cached dependencies
+          keys:
+            - pyness-{{ checksum "requirements.dev.txt" }}
+
+      - run:
+          name: Install virtual environment
+          command: |
+            curl https://pyenv.run | bash
+            git clone https://github.com/pyenv/pyenv-virtualenv.git $HOME/.pyenv/plugins/pyenv-virtualenv
+            exec $SHELL
+
+      - run:
+          name: Configure virtual environment
+          command: |
+            pyenv virtualenv ness
+            pyenv activate ness
+
+      - run:
+          name: Install dependencies
+          command: |
+            pip install -r requirements.dev.txt
+
+      - run:
+          name: Run tests
+          command: PYTHONPATH=. pytest tests -v
+
+      - run:
+          name: Type checks
+          command: |
+            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/log.py
+            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/graph.py
+            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/ness.py
+            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/parse.py
+            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/types.py
+
+      - run:
+          name: Style checks
+          command: flake8 pyness
+

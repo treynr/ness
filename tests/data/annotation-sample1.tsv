@@ -1,0 +1,4 @@
+term	gene	type1	type2
+GO:0048149	DRD2	go_term	gene
+GO:0048149	OPRM1	go_term	gene
+GO:0048149	HDAC2	go_term	gene

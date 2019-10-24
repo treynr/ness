@@ -9,7 +9,7 @@ import logging
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-_logger = None
+_logger = logging.getLogger(__name__)
 
 
 def _initialize_logging(verbose=False):

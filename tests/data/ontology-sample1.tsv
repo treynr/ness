@@ -1,0 +1,4 @@
+term	term	type1	type2
+GO:0048149	GO:0045471	go_term	go_term
+GO:0045471	GO:0009636	go_term	go_term
+GO:0030534	GO:0009636	go_term	go_term

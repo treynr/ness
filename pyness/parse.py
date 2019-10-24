@@ -5,19 +5,15 @@
 ## desc: File parsing.
 ## auth: TR
 
-from collections import namedtuple
-from typing import Dict
 from typing import List
-import argparse
+import csv
 import logging
 import pandas as pd
 
 from . import log
-from .types import Gene
-from .types import GeneSet
-from .types import Homolog
-from .types import Term
 from .types import BioEntity
+from .types import Options
+from .types import Inputs
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -36,31 +32,18 @@ def _read_df(input: str) -> pd.DataFrame:
     return pd.read_csv(input, sep='\t', comment='#')
 
 
-def parse_seed(seed: str) -> BioEntity:
+def _has_header(input: str) -> bool:
     """
-    Parse a string representing a seed node into a wrapped BioEntity type.
+    Uses the CSV Sniffer class to determine if the given input file has a header or not.
 
     arguments
-        seed: seed node string
+        input: the input filepath
 
     returns
-        a BioEntity
+        true if the file has a header, false otherwise
     """
 
-    biotype, seed = seed.split(':', maxsplit=1)
-
-    if biotype.lower() == 'gene':
-        return Gene(seed)
-    elif biotype.lower() == 'geneset':
-        return GeneSet(seed)
-    elif biotype.lower() == 'term':
-        return Term(seed)
-    elif biotype.lower() == 'homolog':
-        return Homolog(seed)
-    else:
-        log._logger.warning(f'No BioEntity matches the given type, "{biotype}"')
-
-    return None
+    return csv.Sniffer().has_header(open(input, 'r').read(8192))
 
 
 def read_seeds(input: str) -> List[BioEntity]:
@@ -74,13 +57,25 @@ def read_seeds(input: str) -> List[BioEntity]:
         a dataframe
     """
 
-    return (
-        pd.read_csv(input, sep='\t', header=None)
-            .iloc[:, 0]
-            .map(parse_seed)
-            .dropna()
-            .tolist()
-    )
+    seeds = pd.read_csv(input, sep='\t', comment='#', header=None, dtype='str')
+
+    ## Assume the second column is the bioentity type associated with the seed
+    if len(seeds.columns) > 1:
+        return (
+            seeds.iloc[:, 0:2]
+                .dropna(subset=[0])
+                .apply(lambda r: BioEntity(r[0], r[1]), axis=1)
+                .tolist()
+        )
+
+    ## Assume there's just one row with seed nodes
+    else:
+        return (
+            seeds.iloc[:, 0]
+                .dropna()
+                .map(lambda r: BioEntity(r[0]))
+                .tolist()
+        )
 
 
 def read_edges(input: str) -> pd.DataFrame:
@@ -88,6 +83,8 @@ def read_edges(input: str) -> pd.DataFrame:
     Read and parse an edge list file.
     The edge list can have any number of fields as long as the first two fields represent
     the source and sink nodes respectively.
+    If there are columns in positions 3 and 4, these columns are treated as the bioentity
+    types for source and sink nodes.
 
     arguments
         input: input filepath
@@ -96,8 +93,26 @@ def read_edges(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    df = _read_df(input)
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
     df = df.rename(columns={df.columns[0]: 'source', df.columns[1]: 'sink'})
+
+    ## Rename if bioentity type columns are supplied otherwise create default types
+    ## for these entities
+    if len(df.columns) >= 3:
+        df = df.rename(columns={df.columns[2]: 'biotype1'})
+    else:
+        df['biotype1'] = 'gene'
+
+    if len(df.columns) >= 4:
+        df = df.rename(columns={df.columns[3]: 'biotype2'})
+    else:
+        df['biotype2'] = 'gene'
 
     return df
 
@@ -107,6 +122,8 @@ def read_annotations(input: str) -> pd.DataFrame:
     Read and parse a file containing ontology annotations.
     The annotation file can have any number of fields as long as the first two fields
     represent the ontology term and gene ID respectively.
+    If there are columns in positions 3 and 4, these columns are treated as the bioentity
+    types for term and gene entities.
 
     arguments
         input: input filepath
@@ -115,8 +132,26 @@ def read_annotations(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    df = _read_df(input)
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
     df = df.rename(columns={df.columns[0]: 'term', df.columns[1]: 'gene'})
+
+    ## Rename if bioentity type columns are supplied otherwise create default types
+    ## for these entities
+    if len(df.columns) >= 3:
+        df = df.rename(columns={df.columns[2]: 'biotype1'})
+    else:
+        df['biotype1'] = 'term'
+
+    if len(df.columns) >= 4:
+        df = df.rename(columns={df.columns[3]: 'biotype2'})
+    else:
+        df['biotype2'] = 'gene'
 
     return df
 
@@ -134,24 +169,41 @@ def read_genesets(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    df = _read_df(input)
-    df = df.rename(columns={df.columns[0]: 'gsid', df.columns[1]: 'genes'})
-    df = df.astype(str)
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
+    df = df.rename(columns={df.columns[0]: 'geneset', df.columns[1]: 'gene'})
+
+    ## Rename if bioentity type columns are supplied otherwise create default types
+    ## for these entities
+    if len(df.columns) >= 3:
+        df = df.rename(columns={df.columns[2]: 'biotype1'})
+    else:
+        df['biotype1'] = 'geneset'
+
+    if len(df.columns) >= 4:
+        df = df.rename(columns={df.columns[3]: 'biotype2'})
+    else:
+        df['biotype2'] = 'gene'
 
     ## Genes don't need to be split
-    if not df.genes.str.contains('|', regex=False).any():
+    if not df.gene.str.contains('|', regex=False).any():
         return df
 
     ## If genes are concatenated, split them up
-    df['genes'] = df.genes.str.split('|')
+    df['gene'] = df.gene.str.split('|')
 
     ## Identify fields that aren't the genes field
-    id_vars = [c for c in df.columns if c != 'genes']
+    id_vars = [c for c in df.columns if c != 'gene']
 
     ## Concat genes so each one has their own separate column
     df = pd.concat([
-        df.drop(columns='genes'),
-        df.genes.apply(pd.Series)
+        df.drop(columns='gene'),
+        df.gene.apply(pd.Series)
     ], axis=1)
 
     ## Melt the frame so there is one gene per row
@@ -165,6 +217,8 @@ def read_homology(input: str) -> pd.DataFrame:
     Read and parse a file containing homology mappings.
     The homology file can have any number of fields as long as the first two fields
     represent the cluster ID and gene ID respectively.
+    If there are columns in positions 3 and 4, these columns are treated as the bioentity
+    types for cluster and gene entities.
 
     arguments
         input: input filepath
@@ -173,9 +227,26 @@ def read_homology(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-
-    df = _read_df(input)
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
     df = df.rename(columns={df.columns[0]: 'cluster', df.columns[1]: 'gene'})
+
+    ## Rename if bioentity type columns are supplied otherwise create default types
+    ## for these entities
+    if len(df.columns) >= 3:
+        df = df.rename(columns={df.columns[2]: 'biotype1'})
+    else:
+        df['biotype1'] = 'homology'
+
+    if len(df.columns) >= 4:
+        df = df.rename(columns={df.columns[3]: 'biotype2'})
+    else:
+        df['biotype2'] = 'gene'
 
     return df
 
@@ -193,18 +264,36 @@ def read_ontologies(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    df = _read_df(input)
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
     df = df.rename(columns={df.columns[0]: 'child', df.columns[1]: 'parent'})
+
+    ## Rename if bioentity type columns are supplied otherwise create default types
+    ## for these entities
+    if len(df.columns) >= 3:
+        df = df.rename(columns={df.columns[2]: 'biotype1'})
+    else:
+        df['biotype1'] = 'term'
+
+    if len(df.columns) >= 4:
+        df = df.rename(columns={df.columns[3]: 'biotype2'})
+    else:
+        df['biotype2'] = 'term'
 
     return df
 
 
-def read_inputs(args: argparse.Namespace) -> Dict[str, pd.DataFrame]:
+def read_inputs(options: Options) -> Inputs:
     """
     Read and parse NESS inputs.
 
     arguments
-        args: argument namespace
+        options: CLI options
 
     returns
         a dict of NESS inputs
@@ -212,38 +301,32 @@ def read_inputs(args: argparse.Namespace) -> Dict[str, pd.DataFrame]:
 
     log._logger.info('Reading and parsing inputs...')
 
-    Inputs = namedtuple(
-        'Inputs', 'annotations edges genesets homology ontologies', defaults=(None,) * 5
-    )
-    annotations = None
-    edges = None
-    genesets = None
-    homology = None
-    ontologies = None
+    inputs = Inputs()
 
-    if args.annotations:
-        annotations = pd.concat([
-            read_annotations(df) for df in args.annotations
+    if options.annotations:
+        inputs.annotations = pd.concat([
+            read_annotations(df) for df in options.annotations
         ])
 
-    if args.edges:
-        edges = pd.concat([
-            read_edges(df) for df in args.edges
+    if options.edges:
+        inputs.edges = pd.concat([
+            read_edges(df) for df in options.edges
         ])
 
-    if args.genesets:
-        genesets = pd.concat([
-            read_genesets(df) for df in args.genesets
+    if options.genesets:
+        inputs.genesets = pd.concat([
+            read_genesets(df) for df in options.genesets
         ])
 
-    if args.homology:
-        homology = pd.concat([
-            read_homology(df) for df in args.homology
+    if options.homology:
+        inputs.homology = pd.concat([
+            read_homology(df) for df in options.homology
         ])
 
-    if args.ontologies:
-        ontologies = pd.concat([
-            read_ontologies(df) for df in args.ontologies
+    if options.ontologies:
+        inputs.ontologies = pd.concat([
+            read_ontologies(df) for df in options.ontologies
         ])
 
-    return Inputs(annotations, edges, genesets, homology, ontologies)
+    return inputs
+
