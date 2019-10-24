@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf8 -*-
 
-## file: test_parse.py
-## desc: Test functions in parse.py.
+## file: test_graph.py
+## desc: Test functions in graph.py.
 
 from pathlib import Path
-from pyness import graph
-from pyness import parse
-from pyness import types
 from scipy.sparse import csr_matrix
 from scipy.sparse import dok_matrix
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+
+from pyness import graph
+from pyness import parse
+from pyness import types
 
 @pytest.fixture(scope='module')
 def root_dir():

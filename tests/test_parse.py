@@ -5,10 +5,11 @@
 ## desc: Test functions in parse.py.
 
 from pathlib import Path
-from pyness import parse
-from pyness import types
 import pandas as pd
 import pytest
+
+from pyness import parse
+from pyness import types
 
 @pytest.fixture(scope='module')
 def root_dir():
