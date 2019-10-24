@@ -9,8 +9,7 @@ jobs:
 
       - restore_cache:
           name: Restore cached dependencies
-          keys:
-            - pyness-{{ checksum "requirements.dev.txt" }}
+          key: pyness-{{ checksum "requirements.dev.txt" }}
 
       - run:
           name: Install virtual environment
@@ -47,3 +46,8 @@ jobs:
           name: Style checks
           command: flake8 pyness
 
+      - save_cache:
+          name: Cache dependencies
+          key: pyness-{{ checksum "requirements.dev.txt" }}
+          paths:
+            - $HOME/.pyenv
