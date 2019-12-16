@@ -488,20 +488,20 @@ def _handle_permuted_single_walk(options, seeds, uids, matrix) -> None:
 @click.version_option(version=__version__.__version__, prog_name='ness')
 @click.argument('output', required=True)
 def cli(
-    annotations: Tuple[click.Path],
-    edges: Tuple[click.Path],
-    genesets: Tuple[click.Path],
-    homology: Tuple[click.Path],
-    ontologies: Tuple[click.Path],
-    seeds: str,
-    seed_file: click.Path,
-    multiple: bool,
-    distributed: bool,
-    cores: int,
-    permutations: int,
-    restart: float,
-    verbose: bool,
-    output: click.Path
+    annotations,
+    edges,
+    genesets,
+    homology,
+    ontologies,
+    seeds,
+    seed_file,
+    multiple,
+    distributed,
+    cores,
+    permutations,
+    restart,
+    verbose,
+    output
 ):
     """
     \b

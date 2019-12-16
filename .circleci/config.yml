@@ -12,11 +12,11 @@ jobs:
 
       - restore_cache:
           name: Restore cached dependencies
-          key: pyness-v1.0.0-{{ checksum "requirements.dev.txt" }}
+          key: pyness-v1.0.0-{{ checksum "requirements.txt" }}
 
       - run:
           name: Install dependencies
-          command: sudo pip install -r requirements.dev.txt
+          command: sudo pip install -r requirements.txt
 
       - run:
           name: Run tests
@@ -24,12 +24,7 @@ jobs:
 
       - run:
           name: Type checks
-          command: |
-            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/log.py
-            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/graph.py
-            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/ness.py
-            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/parse.py
-            mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness/types.py
+          command: mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness
 
       - run:
           name: Style checks
@@ -37,7 +32,7 @@ jobs:
 
       - save_cache:
           name: Cache dependencies
-          key: pyness-v1.0.0-{{ checksum "requirements.dev.txt" }}
+          key: pyness-v1.0.0-{{ checksum "requirements.txt" }}
           paths:
             - /usr/local/lib/python3.7/site-packages
             - /usr/local/bin

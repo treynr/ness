@@ -127,8 +127,27 @@ def _map_seed_uids(seeds: List[types.BioEntity], uids: Dict[types.BioEntity, int
     """
 
     seed_uids = []
+    all_biotypes = list(set([b.biotype for b in uids.keys()]))
 
     for s in seeds:
+        ## If the user did not specify a seed biotype, then we must examine all biotypes
+        ## for potential seed matches.
+        if s.biotype == types._default_biotype:
+            log._logger.warning((
+                f'Seed node {s} is missing a biotype, '
+                'searching all biotypes for matches...'
+            ))
+
+            for bt in all_biotypes:
+                bioent = types.BioEntity(s.id, bt)
+
+                if bioent in uids:
+                    log._logger.warning(
+                        f'Seed node {s} has a potential biotype match: {bt}'
+                    )
+                    seed_uids.append(uids[bioent])
+            continue
+
         if s not in uids:
             log._logger.warning(f'Skipping seed node {s} which is missing from the graph')
             continue

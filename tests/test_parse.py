@@ -83,9 +83,9 @@ def test_seed_file_parsing_1(sample_seeds_1):
     seeds = parse.read_seeds(sample_seeds_1)
 
     assert seeds
-    assert seeds[0] == types.BioEntity('1')
-    assert seeds[1] == types.BioEntity('2')
-    assert seeds[2] == types.BioEntity('3')
+    assert seeds[0] == types.BioEntity('seed1')
+    assert seeds[1] == types.BioEntity('seed2')
+    assert seeds[2] == types.BioEntity('seed3')
 
 
 def test_seed_file_parsing_2(sample_seeds_2):

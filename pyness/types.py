@@ -10,10 +10,12 @@ from dataclasses import field
 from typing import Tuple
 import pandas as pd
 
+_default_biotype = 'default'
+
 @dataclass(repr=True, eq=True, order=True, frozen=True)
 class BioEntity:
     id: str
-    biotype: str = 'default'
+    biotype: str = _default_biotype
     # metadata: Dict[str, str] = field(default_factory=dict)
 
     def __str__(self):

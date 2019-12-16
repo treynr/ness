@@ -73,7 +73,7 @@ def read_seeds(input: str) -> List[BioEntity]:
         return (
             seeds.iloc[:, 0]
                 .dropna()
-                .map(lambda r: BioEntity(r[0]))
+                .map(lambda r: BioEntity(r))
                 .tolist()
         )
 
