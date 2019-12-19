@@ -205,7 +205,7 @@ Install via pip:
 
 .. code:: bash
 
-    $ pip install https://github.com/treynr/ness/archive/v1.0.0.tar.gz
+    $ pip install https://github.com/treynr/ness/releases/download/v1.0.0/ness-1.0.0.tar.gz
 
 Or clone this repo and install using poetry__:
 
