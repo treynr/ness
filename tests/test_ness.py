@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pyness import graph
-from pyness import ness
-from pyness import types
+from ness import graph
+from ness import ness
+from ness import types
 
 @pytest.fixture
 def sample_node_map():

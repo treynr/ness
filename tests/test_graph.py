@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pyness import graph
-from pyness import parse
-from pyness import types
+from ness import graph
+from ness import parse
+from ness import types
 
 @pytest.fixture(scope='module')
 def root_dir():

@@ -1,0 +1,18 @@
+## Ignore the following shit:
+
+## Pycharm crap
+.idea/**
+.idea
+
+## Python caches
+__pycache__/**
+__pycache__
+
+## compiled python files
+*.pyc
+
+## vim swap files
+*.sw*
+
+## Results
+*.tsv

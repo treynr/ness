@@ -12,11 +12,11 @@ jobs:
 
       - restore_cache:
           name: Restore cached dependencies
-          key: pyness-v1.0.0-{{ checksum "requirements.txt" }}
+          key: ness-v1.0.0-{{ checksum ".circleci/requirements.txt" }}
 
       - run:
           name: Install dependencies
-          command: sudo pip install -r requirements.txt
+          command: sudo pip install -r .circleci/requirements.txt
 
       - run:
           name: Run tests
@@ -24,15 +24,15 @@ jobs:
 
       - run:
           name: Type checks
-          command: mypy --show-error-codes --ignore-missing-imports --no-strict-optional pyness
+          command: mypy --show-error-codes --ignore-missing-imports --no-strict-optional ness
 
       - run:
           name: Style checks
-          command: flake8 pyness
+          command: flake8 ness
 
       - save_cache:
           name: Cache dependencies
-          key: pyness-v1.0.0-{{ checksum "requirements.txt" }}
+          key: ness-v1.0.0-{{ checksum ".circleci/requirements.txt" }}
           paths:
             - /usr/local/lib/python3.7/site-packages
             - /usr/local/bin

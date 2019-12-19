@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from pyness import parse
-from pyness import types
+from ness import parse
+from ness import types
 
 @pytest.fixture(scope='module')
 def root_dir():
