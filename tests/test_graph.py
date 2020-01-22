@@ -42,6 +42,10 @@ def sample_geneset(root_dir):
 def sample_ontology(root_dir):
     return parse.read_ontologies(Path(root_dir, 'data/ontology-sample0.tsv').as_posix())
 
+@pytest.fixture(scope='module')
+def sample_output_graph(root_dir):
+    return Path(root_dir, 'data/sample-output-graph.el')
+
 @pytest.fixture
 def sample_inputs(
     sample_annotations,
@@ -57,6 +61,17 @@ def sample_inputs(
 @pytest.fixture
 def sample_node_map():
     return {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5}
+
+@pytest.fixture
+def sample_node_map2():
+    return {
+        types.BioEntity('a', 'term'): 0,
+        types.BioEntity('b', 'term'): 1,
+        types.BioEntity('c', 'term'): 2,
+        types.BioEntity('d', 'term'): 3,
+        types.BioEntity('e', 'term'): 4,
+        types.BioEntity('f', 'term'): 5
+    }
 
 @pytest.fixture
 def sample_graph():
@@ -204,3 +219,18 @@ def test_build_matrix(sample_graph):
             [0.0, 0.5, 0.0, 0.5, 0.0, 0.0]
         ])
     )
+
+def test_save_graph(sample_graph, sample_node_map2, sample_output_graph):
+    graph.save_graph(sample_graph, sample_node_map2, sample_output_graph)
+    df = pd.read_csv(sample_output_graph, sep='\t')
+
+    assert 'node1' in df.columns
+    assert 'node2' in df.columns
+    assert 'biotype1' in df.columns
+    assert 'biotype2' in df.columns
+    assert len(df.index) == 12
+    assert (df.biotype1 == 'term').all()
+    assert (df.biotype2 == 'term').all()
+    assert df.node1.map(lambda e: types.BioEntity(e, 'term')).isin(sample_node_map2).all()
+    assert df.node2.map(lambda e: types.BioEntity(e, 'term')).isin(sample_node_map2).all()
+

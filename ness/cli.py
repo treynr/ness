@@ -299,6 +299,13 @@ def _handle_permuted_single_walk(options, seeds, uids, matrix) -> None:
     help='restart probability'
 )
 @click.option(
+    '--graph',
+    'graph_out',
+    default=False,
+    is_flag=True,
+    help='construct and save the heterogeneous graph to the output file'
+)
+@click.option(
     '--verbose',
     default=False,
     is_flag=True,
@@ -320,6 +327,7 @@ def cli(
     permutations,
     restart,
     verbose,
+    graph_out,
     output
 ):
     """
@@ -366,6 +374,15 @@ def cli(
         log._logger.error('You must provide an output filepath')
         click.echo('')
         click.echo(click.get_current_context().get_help())
+
+    ## Build the graph, save to file, and exit
+    if graph_out:
+        inputs = parse.read_inputs(options)
+        uids, hetnet = graph.build_graph(inputs)
+
+        graph.save_graph(hetnet, uids, output)
+
+        exit()
 
     seeds = _handle_seeds(options) # type: ignore
     uids, matrix = _build_graph(options)

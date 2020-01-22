@@ -26,3 +26,5 @@ def _initialize_logging(verbose=False):
     _logger.setLevel(logging.INFO if verbose else logging.ERROR)
     _logger.addHandler(conlog)
 
+    ## Usually get lots of warnings from these dask modules.
+    logging.getLogger('distributed.utils_perf').setLevel(logging.ERROR)

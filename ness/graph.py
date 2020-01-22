@@ -6,6 +6,7 @@
 ## auth: TR
 
 from itertools import count
+from pathlib import Path
 from scipy.sparse import csr_matrix
 from scipy.sparse import dok_matrix
 from typing import Dict
@@ -356,4 +357,29 @@ def build_matrix(hetnet: nx.Graph) -> csr_matrix:
     matrix = column_normalize_matrix(matrix)
 
     return matrix
+
+
+def save_graph(hetnet: nx.Graph, uids: Dict[BioEntity, int], output: Path) -> None:
+    """
+    Save the heterogeneous graph to a file.
+
+    arguments
+        hetnet: the graph
+        uids:   UID mapping
+        output: output path
+    """
+
+    ## Reverse mapping
+    ruids = dict([(b, a) for a, b in uids.items()])
+    edges = []
+
+    for e1, e2 in hetnet.edges.keys():
+        e1 = ruids[e1]
+        e2 = ruids[e2]
+
+        edges.append([e1.id, e2.id, e1.biotype, e2.biotype])
+
+    pd.DataFrame(edges, columns=['node1', 'node2', 'biotype1', 'biotype2']).to_csv(
+        output, sep='\t', index=False
+    )
 

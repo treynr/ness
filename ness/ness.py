@@ -385,6 +385,7 @@ def run_individual_walks(
     ## Perform separate walks for each individual seed
     else:
         for s in seeds:
+            #print(f'doing seed: {s}')
             prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
 
             if prox_vector is not None:
@@ -541,7 +542,7 @@ def distribute_individual_permutation_tests(
     permutations: int = 250,
     alpha: np.double = 0.15,
     procs: int = os.cpu_count(),
-    single: bool = True,
+    single: bool = False,
     fdr: bool = False
 ) -> None:
     """
@@ -576,7 +577,7 @@ def distribute_individual_permutation_tests(
         log._logger.info('Running permutation tests...')
 
         permuted_futures = []
-        [s] = client.scatter([s], broadcast=True)
+        s = client.scatter([s], broadcast=True)
 
         ## Split the number of permutations evenly
         for chunk in np.array_split(np.zeros(permutations), procs):
