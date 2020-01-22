@@ -385,7 +385,6 @@ def run_individual_walks(
     ## Perform separate walks for each individual seed
     else:
         for s in seeds:
-            #print(f'doing seed: {s}')
             prox_vector = _run_individual_walks(matrix, [s], uids, alpha)
 
             if prox_vector is not None:
