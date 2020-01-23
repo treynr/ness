@@ -81,7 +81,7 @@ edge lists
     ``-e/--edges``. Undirected edges from biological networks (e.g., BioGRID__).
 
 gene sets
-    ``-a/--annotations``. Bipartite set-gene associations from gene set resources such as
+    ``-g/--genesets``. Bipartite set-gene associations from gene set resources such as
     GeneWeaver__.
 
 homology mappings
@@ -205,14 +205,14 @@ Install via pip:
 
 .. code:: bash
 
-    $ pip install https://github.com/treynr/ness/archive/v1.0.0.tar.gz
+    $ pip install https://github.com/treynr/ness/releases/download/v1.0.0/ness-1.0.0.tar.gz
 
 Or clone this repo and install using poetry__:
 
 .. code:: bash
 
     $ git clone https://github.com/treynr/ness.git
-    $ cd nes
+    $ cd ness
     $ poetry install
     $ poetry run ness
 
