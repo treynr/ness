@@ -320,7 +320,10 @@ def _run_individual_walks(
     revuids = dict([(b, a) for a, b in uids.items()])
 
     ## Map seed UIDs
-    mapped_seeds = _map_seed_uids(seeds, uids)
+    if single:
+        mapped_seeds = _map_seed_uids(seeds[0], uids) # type: ignore
+    else:
+        mapped_seeds = _map_seed_uids(seeds, uids)
 
     if not mapped_seeds:
         return None
@@ -469,7 +472,7 @@ def _run_individual_permutation_tests(
     """
 
     ## First get the proximity vector for the walk
-    prox_vector = _run_individual_walks(matrix, seeds, uids, alpha)
+    prox_vector = _run_individual_walks(matrix, seeds, uids, alpha, single=single)
 
     ## Start the permutation testing
     for i in range(permutations):
@@ -478,7 +481,9 @@ def _run_individual_permutation_tests(
         permuted_uids = graph.shuffle_node_labels(uids)
 
         ## Run the permuted walk
-        permuted_vector = _run_individual_walks(matrix, seeds, permuted_uids, alpha)
+        permuted_vector = _run_individual_walks(
+            matrix, seeds, permuted_uids, alpha, single=single
+        )
 
         ## Join on the original results
         prox_vector[f'p_{i}'] = permuted_vector.probability
@@ -588,7 +593,8 @@ def distribute_individual_permutation_tests(
                 uids,
                 len(chunk),
                 alpha,
-                pure=False
+                pure=False,
+                single=single
             )
 
             permuted_futures.append(prox_vector_future)

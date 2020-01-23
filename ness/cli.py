@@ -203,14 +203,21 @@ def _handle_permuted_single_walk(options, seeds, uids, matrix) -> None:
         ## Do the permutation testing
         ness.distribute_individual_permutation_tests(
             matrix,
-            [seeds],
+            seeds,
             uids,
             options.output,
             permutations=options.permutations,
             alpha=options.restart,
+            single=True
         )
 
         client.close()
+
+    else:
+        ## Run the permutation testing
+        ness.run_individual_permutation_tests(
+            matrix, seeds, uids, options.output, options.permutations, options.restart
+        )
 
 
 @click.command()
@@ -403,7 +410,7 @@ def cli(
     ## A single random walk starting from all seeds simultaneously with
     ## permutation testing
     elif options.multiple and options.permutations:
-        pass
+        _handle_permuted_single_walk(options, seeds, uids, matrix)
 
     elif options.multiple:
         pass

@@ -11,6 +11,7 @@ Added
 
 - Add changelog.
 - Add CLI option, :code:`--graph`, for saving the heterogeneous graph to an output file.
+- Add option for starting the walk from multiple seeds at once with permutation testing.
 
 Fixed
 -----
