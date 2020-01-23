@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ness"
-version = "1.0.0"
+version = "1.1.0"
 description = "Heterogeneous, multi-species graph aggregation and analysis using random walks."
 authors = ["TR <git@fin0c.net>"]
 license = "MIT"
