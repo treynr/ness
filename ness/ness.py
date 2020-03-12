@@ -631,7 +631,11 @@ def distribute_individual_permutation_tests(
 
         ## Calculate p-values from the permutations once the scores are finished
         ## computing
-        futures.append(client.submit(_collapse_permutation_tests, *permuted_futures))
+        futures.append(client.submit(
+            _collapse_permutation_tests,
+            *permuted_futures,
+            permutations=permutations
+        ))
 
         ## Generate the file header
         _make_ness_header_output(output, p=True)
