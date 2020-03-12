@@ -538,16 +538,44 @@ def run_individual_permutation_tests(
         _append_ness_output(output, prox_vector)
 
 
+def _collapse_permutation_tests(*args):
+    output = tf.NamedTemporaryFile(delete=False).name
+
+    if len(args) == 0:
+        return output
+
+    ## Keep the first dataframe from the list, we'll use it to keep the node_from, node_to, and probability columns,
+    ## then for the rest of the dataframes in the list, we'll drop those columns and just concatenate
+    ## walk scores along axis 1.
+    prox_vector = args[0]
+
+    ## Now remove node_from, node_to, probability columns from the rest of the tests and
+    ## only keep their permuted walk scores
+    for df in test:
+        prox_vector = pd.concat([
+            prox_vector,
+            df.drop(columns=['node_from', 'node_to', 'probability'])
+        ], axis=1)
+
+    ## Calculate the p-value
+    prox_vector = _calculate_p(prox_vector, permutations)
+
+    ## Save to a temporary file and return the filepath
+    _append_ness_output(output, prox_vector)
+
+    return output
+
+
 def distribute_individual_permutation_tests(
-    matrix: csr_matrix,
-    seeds: List[types.BioEntity],
-    uids: Dict[types.BioEntity, int],
-    output: str,
-    permutations: int = 250,
-    alpha: np.double = 0.15,
-    procs: int = os.cpu_count(),
-    single: bool = False,
-    fdr: bool = False
+        matrix: csr_matrix,
+        seeds: List[types.BioEntity],
+        uids: Dict[types.BioEntity, int],
+        output: str,
+        permutations: int = 250,
+        alpha: np.double = 0.15,
+        procs: int = os.cpu_count(),
+        single: bool = False,
+        fdr: bool = False
 ) -> None:
     """
     Run the random walk algorithm for seeds in the given seeds list and also perform
@@ -599,9 +627,23 @@ def distribute_individual_permutation_tests(
 
             permuted_futures.append(prox_vector_future)
 
-        futures.append(permuted_futures)
+        ## Calculate p-values from the permutations once the scores are finished
+        ## computing
+        futures.append(client.submit(_collapse_permutation_tests, *permuted_futures))
 
-    log._logger.info('Calculating p-values...')
+        ## Generate the file header
+        _make_ness_header_output(output, p=True)
+
+        ## As the p-values finish being computed, save them to the final output and remove
+        ## the temp files
+        for _, temp in as_completed(futures, with_results=True):
+            _append_ness_output(output, pd.read_csv(temp, sep='\t'))
+
+
+    return
+    #futures.append(permuted_futures)
+
+    #log._logger.info('Calculating p-values...')
 
     ## Wait for testing to finish
     for i, test in enumerate(futures):
