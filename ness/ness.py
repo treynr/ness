@@ -640,7 +640,7 @@ def distribute_individual_permutation_tests(
             _collapse_permutation_tests,
             *permuted_futures,
             permutations=permutations,
-            tempout=tempdir
+            tempdir=tempdir
         ))
 
         ## Generate the file header
