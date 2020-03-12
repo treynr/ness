@@ -5,6 +5,7 @@
 ## desc: NESS python implementation.
 ## auth: TR
 
+from dask.distributed import as_completed
 from dask.distributed import get_client
 from math import floor
 from pathlib import Path
@@ -538,7 +539,7 @@ def run_individual_permutation_tests(
         _append_ness_output(output, prox_vector)
 
 
-def _collapse_permutation_tests(*args):
+def _collapse_permutation_tests(*args, **kwargs):
     output = tf.NamedTemporaryFile(delete=False).name
 
     if len(args) == 0:
@@ -551,14 +552,15 @@ def _collapse_permutation_tests(*args):
 
     ## Now remove node_from, node_to, probability columns from the rest of the tests and
     ## only keep their permuted walk scores
-    for df in test:
+    for df in args:
         prox_vector = pd.concat([
             prox_vector,
             df.drop(columns=['node_from', 'node_to', 'probability'])
         ], axis=1)
 
-    ## Calculate the p-value
-    prox_vector = _calculate_p(prox_vector, permutations)
+    ## Calculate the p-value, should probably check kwargs for a permutations key but
+    ## it should always be there...
+    prox_vector = _calculate_p(prox_vector, kwargs['permutations'])
 
     ## Save to a temporary file and return the filepath
     _append_ness_output(output, prox_vector)
@@ -639,40 +641,39 @@ def distribute_individual_permutation_tests(
         for _, temp in as_completed(futures, with_results=True):
             _append_ness_output(output, pd.read_csv(temp, sep='\t'))
 
-
     return
-    #futures.append(permuted_futures)
+    # futures.append(permuted_futures)
 
-    #log._logger.info('Calculating p-values...')
+    # log._logger.info('Calculating p-values...')
 
-    ## Wait for testing to finish
-    for i, test in enumerate(futures):
+    # ## Wait for testing to finish
+    # for i, test in enumerate(futures):
 
-        ## Gather the results of the permutation tests for this specific seed node
-        test = client.gather(test)
-        ## Get the first test so we keep the node_from, node_to, and prob. columns and
-        ## concat the walk scores from the rest.
-        prox_vector = test.pop(0)
+    #     ## Gather the results of the permutation tests for this specific seed node
+    #     test = client.gather(test)
+    #     ## Get the first test so we keep the node_from, node_to, and prob. columns and
+    #     ## concat the walk scores from the rest.
+    #     prox_vector = test.pop(0)
 
-        ## Get rid of node_from, node_to, prob. columns from the rest of the tests and
-        ## only keep their permuted walk scores
-        for df in test:
-            prox_vector = pd.concat([
-                prox_vector,
-                df.drop(columns=['node_from', 'node_to', 'probability'])
-            ], axis=1)
+    #     ## Get rid of node_from, node_to, prob. columns from the rest of the tests and
+    #     ## only keep their permuted walk scores
+    #     for df in test:
+    #         prox_vector = pd.concat([
+    #             prox_vector,
+    #             df.drop(columns=['node_from', 'node_to', 'probability'])
+    #         ], axis=1)
 
-        ## Calculate the p-value
-        prox_vector = _calculate_p(prox_vector, permutations)
+    #     ## Calculate the p-value
+    #     prox_vector = _calculate_p(prox_vector, permutations)
 
-        ## FDR adjusted p-values
-        if fdr:
-            prox_vector = _adjust_fdr(prox_vector)
+    #     ## FDR adjusted p-values
+    #     if fdr:
+    #         prox_vector = _adjust_fdr(prox_vector)
 
-        ## Create a new file if necessary
-        if i == 0:
-            _make_ness_header_output(output, p=True, q=fdr)
+    #     ## Create a new file if necessary
+    #     if i == 0:
+    #         _make_ness_header_output(output, p=True, q=fdr)
 
-        ## Save the output
-        _append_ness_output(output, prox_vector)
+    #     ## Save the output
+    #     _append_ness_output(output, prox_vector)
 
