@@ -540,7 +540,11 @@ def run_individual_permutation_tests(
 
 
 def _collapse_permutation_tests(*args, **kwargs):
-    output = tf.NamedTemporaryFile(delete=False).name
+
+    output = tf.NamedTemporaryFile(
+        delete=False,
+        dir=(None if 'tempdir' not in kwargs else kwargs['tempdir'].as_posix())
+    ).name
 
     if len(args) == 0:
         return output
@@ -569,15 +573,16 @@ def _collapse_permutation_tests(*args, **kwargs):
 
 
 def distribute_individual_permutation_tests(
-        matrix: csr_matrix,
-        seeds: List[types.BioEntity],
-        uids: Dict[types.BioEntity, int],
-        output: str,
-        permutations: int = 250,
-        alpha: np.double = 0.15,
-        procs: int = os.cpu_count(),
-        single: bool = False,
-        fdr: bool = False
+    matrix: csr_matrix,
+    seeds: List[types.BioEntity],
+    uids: Dict[types.BioEntity, int],
+    output: str,
+    permutations: int = 250,
+    alpha: np.double = 0.15,
+    procs: int = os.cpu_count(),
+    single: bool = False,
+    fdr: bool = False,
+    tempdir: Path = None
 ) -> None:
     """
     Run the random walk algorithm for seeds in the given seeds list and also perform
@@ -634,7 +639,8 @@ def distribute_individual_permutation_tests(
         futures.append(client.submit(
             _collapse_permutation_tests,
             *permuted_futures,
-            permutations=permutations
+            permutations=permutations,
+            tempout=tempdir
         ))
 
         ## Generate the file header
