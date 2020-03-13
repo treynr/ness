@@ -45,7 +45,7 @@ def _make_ness_header_output(output: str, p: bool = False, q: bool = False) -> N
         print('\t'.join(columns), file=fl)
 
 
-def _append_ness_output(output: str, vector: pd.DataFrame) -> None:
+def _append_ness_output(output: str, vector: pd.DataFrame, header: bool = False) -> None:
     """
     Append NESS output to the given file.
 
@@ -72,7 +72,7 @@ def _append_ness_output(output: str, vector: pd.DataFrame) -> None:
         mode='a',
         sep='\t',
         index=False,
-        header=False,
+        header=header,
         columns=columns
     )
 
@@ -567,7 +567,7 @@ def _collapse_permutation_tests(*args, **kwargs):
     prox_vector = _calculate_p(prox_vector, kwargs['permutations'])
 
     ## Save to a temporary file and return the filepath
-    _append_ness_output(output, prox_vector)
+    _append_ness_output(output, prox_vector, header=True)
 
     return output
 

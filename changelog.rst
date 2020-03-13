@@ -5,10 +5,22 @@ Changelog
 Unreleased
 ----------
 
+
+Changed
+'''''''
+
+- Alter the function for distributing permutation tests across cores to take in a
+  variable that can be used to specify the temporary directory for temp files.
+  This is necessary if using NESS as a library and distributing work across
+  a cluster of nodes--most nodes will not have access to the temp directories of other
+  nodes.
+
 Fixed
 '''''
 
 - Fix memory usage issue when running permutations over massive (>100GB) networks
+
+
 
 
 1.1.0 - 2020.01.06
