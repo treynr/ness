@@ -211,41 +211,48 @@ def build_heterogeneous_graph(
     """
 
     ## the python "type" system is fucking dumb
-    relations: List[Tuple[BioEntity, BioEntity]] = []
+    relations = []  # type: ignore
 
     if inputs.annotations is not None:
-        relations.extend(
-            inputs.annotations[['term', 'gene']].itertuples(index=False, name=None)
+        relations.extend(inputs
+            .annotations[['term', 'gene', 'score']]
+            .itertuples(index=False, name=None)
         )
 
     if inputs.edges is not None:
-        relations.extend(
-            inputs.edges[['source', 'sink']].itertuples(index=False, name=None)
+        relations.extend(inputs
+            .edges[['source', 'sink', 'score']]
+            .itertuples(index=False, name=None)
         )
 
     if inputs.genesets is not None:
-        relations.extend(
-            inputs.genesets[['geneset', 'gene']].itertuples(index=False, name=None)
+        relations.extend(inputs
+            .genesets[['geneset', 'gene', 'score']]
+            .itertuples(index=False, name=None)
         )
 
     if inputs.ontologies is not None:
-        relations.extend(
-            inputs.ontologies[['child', 'parent']].itertuples(index=False, name=None)
+        relations.extend(inputs
+            .ontologies[['child', 'parent', 'score']]
+            .itertuples(index=False, name=None)
         )
 
     if inputs.homology is not None:
-        relations.extend(
-            inputs.homology[['cluster', 'gene']].itertuples(index=False, name=None)
+        relations.extend(inputs
+            .homology[['cluster', 'gene', 'score']]
+            .itertuples(index=False, name=None)
         )
 
-    mapped_relations = [(uids[a], uids[b]) for a, b in relations]
+    mapped_relations = [(uids[a], uids[b], s) for a, b, s in relations]
 
     if undirected:
-        mapped_relations.extend([(uids[b], uids[a]) for a, b in relations])
+        mapped_relations.extend([(uids[b], uids[a], s) for a, b, s in relations])
 
     graph = nx.DiGraph()
 
-    graph.add_edges_from(mapped_relations)
+    for e1, e2, w in mapped_relations:
+        graph.add_edge(e1, e2, weight=w)
+    # graph.add_edges_from(mapped_relations)
 
     return graph
 
@@ -264,8 +271,11 @@ def graph_to_sparse_matrix(graph: nx.Graph) -> dok_matrix:
     nodes = nx.number_of_nodes(graph)
     matrix = dok_matrix((nodes, nodes), dtype=np.double)
 
-    for ef, et in graph.edges:
-        matrix[ef, et] = 1.0
+    # for ef, et in graph.edges:
+    #     matrix[ef, et] = 1.0
+
+    for ef, et, d in graph.edges.data():
+        matrix[ef, et] = d['weight']
 
     return matrix
 

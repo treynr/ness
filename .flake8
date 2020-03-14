@@ -5,7 +5,9 @@ exclude =
     .git
 
 ignore =
-    ## Continuation line unaligned for hanging indent...
+    ## Continuation line under-indented for visual indent
+    E128
+    ## Continuation line unaligned for hanging indent
     E131
     ## At least two spaces before inline comment
     E261,

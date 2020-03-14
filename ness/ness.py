@@ -184,6 +184,7 @@ def _calculate_p(vector: pd.DataFrame, n: int) -> pd.DataFrame:
             .sum(axis=1)
     )
     vector['p'] = (vector.p + 1) / (n + 1)
+    vector['p'] = vector.p.mask(vector.p > 1.0, 1.0)
 
     ## Get rid of all the permuted score columns
     return vector[['node_from', 'node_to', 'probability', 'p']]
@@ -556,7 +557,7 @@ def _collapse_permutation_tests(*args, **kwargs):
 
     ## Now remove node_from, node_to, probability columns from the rest of the tests and
     ## only keep their permuted walk scores
-    for df in args:
+    for df in args[1:]:
         prox_vector = pd.concat([
             prox_vector,
             df.drop(columns=['node_from', 'node_to', 'probability'])
@@ -599,6 +600,9 @@ def distribute_individual_permutation_tests(
         single:       start from multiple seed nodes at once
     """
 
+    if tempdir is None:
+        tempdir = Path(tf.gettempdir())
+
     client = get_client()
 
     log._logger.info('Scattering data to workers...')
@@ -610,6 +614,9 @@ def distribute_individual_permutation_tests(
 
     if single:
         seeds = [seeds] # type: ignore
+
+    ## Generate the file header
+    _make_ness_header_output(output, p=True)
 
     for s in seeds:
 
@@ -642,9 +649,6 @@ def distribute_individual_permutation_tests(
             permutations=permutations,
             tempdir=tempdir
         ))
-
-        ## Generate the file header
-        _make_ness_header_output(output, p=True)
 
         ## As the p-values finish being computed, save them to the final output and remove
         ## the temp files

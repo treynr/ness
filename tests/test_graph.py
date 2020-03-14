@@ -79,7 +79,7 @@ def sample_graph():
     g.add_edges_from([
         (0, 1), (0, 3), (0, 5), (1, 0), (1, 2), (2, 0), (2, 1), (3, 1),
         (3, 4), (4, 1), (5, 1), (5, 3)
-    ])
+    ], weight=1.0)
     return g
 
 @pytest.fixture

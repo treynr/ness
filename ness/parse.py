@@ -6,8 +6,10 @@
 ## auth: TR
 
 from typing import List
+from typing import Tuple
 import csv
 import logging
+import numpy as np
 import pandas as pd
 
 from . import log
@@ -78,6 +80,70 @@ def read_seeds(input: str) -> List[BioEntity]:
         )
 
 
+def _generic_read_file(
+    input: str,
+    columns: Tuple[str, str],
+    biotypes: Tuple[str, str]
+) -> pd.DataFrame:
+    """
+    Function designed to read/parse one of the various input file types:
+    annotations, edges, genesets, homologies, ontologies.
+
+    :param input:
+    :param columns:
+    :return:
+    """
+
+    ## These should always contain two elements and if they don't something went srsly
+    ## wrong--we should never execute these lines
+    if len(columns) != 2:
+        raise ValueError('_generic_read_file(): columns requires exactly two elements')
+    if len(biotypes) != 2:
+        raise ValueError('_generic_read_file(): biotypes requires exactly two elements')
+
+    df = pd.read_csv(
+        input,
+        sep='\t',
+        comment='#',
+        header='infer' if _has_header(input) else None,
+        dtype=str
+    )
+    df = df.rename(columns={df.columns[0]: columns[0], df.columns[1]: columns[1]})
+
+    ## If the number of columns is equal to exactly three, assume the user is formatting
+    ## their data as node, node, score.
+    ## If column number is four, assume the format is node, node, biotype, biotype.
+    ## And if the column number is five then the format should be node, node, biotype,
+    ## biotype, score.
+    if len(df.columns) == 2:
+        df['biotype1'] = biotypes[0]
+        df['biotype2'] = biotypes[1]
+        df['score'] = 1.0
+
+    elif len(df.columns) == 3:
+        df = df.rename(columns={df.columns[2]: 'score'})
+
+        df['biotype1'] = biotypes[0]
+        df['biotype2'] = biotypes[1]
+
+    elif len(df.columns) == 4:
+        df = df.rename(columns={df.columns[2]: 'biotype1', df.columns[3]: 'biotype2'})
+
+        df['score'] = 1.0
+
+    else:  # columns >= 5
+        df = df.rename(columns={
+            df.columns[2]: 'biotype1', df.columns[3]: 'biotype2', df.columns[4]: 'score'
+        })
+
+    ## Ensure the score is numeric.
+    ## TODO: May want to change this to report and ignore failures when converting rather
+    ## than raising an exception
+    df['score'] = pd.to_numeric(df.score).astype(np.double)
+
+    return df
+
+
 def read_edges(input: str) -> pd.DataFrame:
     """
     Read and parse an edge list file.
@@ -92,6 +158,8 @@ def read_edges(input: str) -> pd.DataFrame:
     returns
         a dataframe
     """
+
+    return _generic_read_file(input, ('source', 'sink'), ('gene', 'gene'))
 
     df = pd.read_csv(
         input,
@@ -132,6 +200,8 @@ def read_annotations(input: str) -> pd.DataFrame:
         a dataframe
     """
 
+    return _generic_read_file(input, ('term', 'gene'), ('term', 'gene'))
+
     df = pd.read_csv(
         input,
         sep='\t',
@@ -169,26 +239,28 @@ def read_genesets(input: str) -> pd.DataFrame:
         a dataframe
     """
 
-    df = pd.read_csv(
-        input,
-        sep='\t',
-        comment='#',
-        header='infer' if _has_header(input) else None,
-        dtype=str
-    )
-    df = df.rename(columns={df.columns[0]: 'geneset', df.columns[1]: 'gene'})
+    # df = pd.read_csv(
+    #     input,
+    #     sep='\t',
+    #     comment='#',
+    #     header='infer' if _has_header(input) else None,
+    #     dtype=str
+    # )
+    # df = df.rename(columns={df.columns[0]: 'geneset', df.columns[1]: 'gene'})
 
-    ## Rename if bioentity type columns are supplied otherwise create default types
-    ## for these entities
-    if len(df.columns) >= 3:
-        df = df.rename(columns={df.columns[2]: 'biotype1'})
-    else:
-        df['biotype1'] = 'geneset'
+    # ## Rename if bioentity type columns are supplied otherwise create default types
+    # ## for these entities
+    # if len(df.columns) >= 3:
+    #     df = df.rename(columns={df.columns[2]: 'biotype1'})
+    # else:
+    #     df['biotype1'] = 'geneset'
 
-    if len(df.columns) >= 4:
-        df = df.rename(columns={df.columns[3]: 'biotype2'})
-    else:
-        df['biotype2'] = 'gene'
+    # if len(df.columns) >= 4:
+    #     df = df.rename(columns={df.columns[3]: 'biotype2'})
+    # else:
+    #     df['biotype2'] = 'gene'
+
+    df = _generic_read_file(input, ('geneset', 'gene'), ('geneset', 'gene'))
 
     ## Genes don't need to be split
     if not df.gene.str.contains('|', regex=False).any():
@@ -227,6 +299,8 @@ def read_homology(input: str) -> pd.DataFrame:
         a dataframe
     """
 
+    return _generic_read_file(input, ('cluster', 'gene'), ('homology', 'gene'))
+
     df = pd.read_csv(
         input,
         sep='\t',
@@ -263,6 +337,8 @@ def read_ontologies(input: str) -> pd.DataFrame:
     returns
         a dataframe
     """
+
+    return _generic_read_file(input, ('child', 'parent'), ('term', 'term'))
 
     df = pd.read_csv(
         input,
@@ -329,4 +405,3 @@ def read_inputs(options: Options) -> Inputs:
         ])
 
     return inputs
-
