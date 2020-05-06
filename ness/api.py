@@ -123,7 +123,7 @@ def format_seeds(seeds: pd.DataFrame, biotype: str = None) -> List[BioEntity]:
 
     """
 
-    new_seeds = []
+    new_seeds = [] # type: ignore
 
     if seeds.empty:
         raise ValueError('ness.api._format_seeds: the seeds dataframe cannot be empty')
