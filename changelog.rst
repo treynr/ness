@@ -5,6 +5,11 @@ Changelog
 Unreleased
 ----------
 
+Added
+'''''
+
+- Add an API module containing simplified, easy-to-use functions for calling NESS
+  graph building, matrix creation, and random walk code from external Python code.
 
 Changed
 '''''''
@@ -19,8 +24,6 @@ Fixed
 '''''
 
 - Fix memory usage issue when running permutations over massive (>100GB) networks
-
-
 
 
 1.1.0 - 2020.01.06
