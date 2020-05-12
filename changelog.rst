@@ -10,6 +10,8 @@ Added
 
 - Add an API module containing simplified, easy-to-use functions for calling NESS
   graph building, matrix creation, and random walk code from external Python code.
+- Add option to specify a temporary directory when running a distributed random walk.
+  This is probably necessary if using a cluster of machines.
 
 Changed
 '''''''

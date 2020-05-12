@@ -404,17 +404,19 @@ def distribute_individual_walks(
     uids: Dict[types.BioEntity, int],
     output: str,
     alpha: np.double = 0.15,
-    procs: int = os.cpu_count()
+    procs: int = os.cpu_count(),
+    temp_dir: str = None
 ) -> None:
     """
     Run the random walk algorithm.
 
     arguments
-        matrix: transition probability matrix
-        seeds:  seed list
-        uids:   UID map
-        output: output filepath
-        alpha:  restart probability
+        matrix:   transition probability matrix
+        seeds:    seed list
+        uids:     UID map
+        output:   output filepath
+        alpha:    restart probability
+        temp_dir: specify a directory for temporary output files
     """
 
     client = get_client()
@@ -431,7 +433,7 @@ def distribute_individual_walks(
             continue
 
         ## Temp output
-        tmp_out = tf.NamedTemporaryFile().name
+        tmp_out = tf.NamedTemporaryFile(dir=temp_dir).name
 
         ## Run the random walk algorithm for each seed
         future = client.submit(
